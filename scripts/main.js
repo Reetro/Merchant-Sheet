@@ -552,22 +552,11 @@ Hooks.once("socketlib.ready", () => {
   console.log("Merchant Sheet | Socketlib registered successfully", _socket);
 });
 
-// Fallback if socketlib.ready already fired before our module loaded
 Hooks.once("ready", () => {
-  if (!_socket && typeof socketlib !== "undefined") {
-    console.log("Merchant Sheet | Late socketlib registration");
-    _socket = socketlib.registerModule(MODULE_ID);
-    _socket.register("remoteOpenMerchant", _remoteOpenMerchant);
-    _socket.register("remoteCloseShop",    _remoteCloseShop);
-    game.modules.get(MODULE_ID)._socket = _socket;
-    console.log("Merchant Sheet | Late socketlib registered", _socket);
-  } else if (!_socket) {
-    console.error("Merchant Sheet | socketlib not available at ready!");
+  console.log("Merchant Sheet | Ready — socket status:", _socket ? "registered" : "NOT REGISTERED");
+  if (!_socket) {
+    console.error("Merchant Sheet | socketlib.ready did not fire before ready — check socketlib is enabled and loads before merchant-sheet");
   }
-});
-
-Hooks.once("ready", () => {
-  console.log("Merchant Sheet | Ready");
 });
 
 // ─── Actor directory right-click ──────────────────────────────────────────────
