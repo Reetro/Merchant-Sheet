@@ -33,10 +33,10 @@ function emitToAll(type, payload = {}) {
     return;
   }
   if (type === "openMerchant") {
-    // Execute on all clients including self
-    _socket.executeForEveryone(_remoteOpenMerchant, payload.actorId);
+    // executeForEveryone takes the registered string name, not the function
+    _socket.executeForEveryone("remoteOpenMerchant", payload.actorId);
   } else if (type === "closeShop") {
-    _socket.executeForEveryone(_remoteCloseShop, payload.actorId);
+    _socket.executeForEveryone("remoteCloseShop", payload.actorId);
   }
 }
 
@@ -442,8 +442,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
   _broadcastToAll() {
     console.log(`Merchant Sheet | Show to All clicked for actor: ${this.actor.id} (${this.actor.name})`);
-    console.log(`Merchant Sheet | Socket key: ${SOCKET_KEY}`);
-    console.log(`Merchant Sheet | Socket connected:`, !!game.socket);
+    console.log(`Merchant Sheet | Socket:`, _socket ? "ready" : "NOT READY");
     emitToAll("openMerchant", { actorId: this.actor.id });
     ui.notifications.info("Merchant Sheet: Shop shown to all players.");
   }
