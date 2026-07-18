@@ -597,6 +597,8 @@ Hooks.once("ready", () => {
 Hooks.on("renderActorDirectory", (app, html) => {
   const root = html instanceof HTMLElement ? html : html[0];
   if (!root) return;
+
+  // Double-click intercept for merchant actors
   root.querySelectorAll(".document[data-document-id]").forEach(el => {
     el.addEventListener("dblclick", e => {
       const actor = game.actors.get(el.dataset.documentId);
@@ -604,7 +606,29 @@ Hooks.on("renderActorDirectory", (app, html) => {
       e.stopPropagation();
       e.preventDefault();
       openMerchantSheet(actor);
-    }, true); // capture phase fires before Foundry's handler
+    }, true);
+  });
+
+});
+
+// ─── Add Create Merchant to Actor Directory header ────────────────────────────
+// getActorDirectoryHeaderButtons is the correct v14 hook for adding sidebar buttons
+
+Hooks.on("getActorDirectoryHeaderButtons", (app, buttons) => {
+  buttons.unshift({
+    label:  "Create Merchant",
+    icon:   "fas fa-store",
+    class:  "create-merchant",
+    onclick: async () => {
+      const actor = await Actor.create({
+        name:   "New Merchant",
+        type:   "npc",
+        img:    "icons/svg/item-bag.svg",
+        system: { attributes: { hp: { value: 1, max: 1 } } },
+        prototypeToken: { name: "Merchant", disposition: 1 },
+      });
+      openMerchantSheet(actor);
+    },
   });
 });
 
