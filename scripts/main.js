@@ -116,6 +116,35 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   async _insertElement(element, options) {
     console.log(`Merchant Sheet | _insertElement called, appending to body`);
     document.body.appendChild(element);
+
+    // Force visibility — bypass any module that hides UI elements
+    element.style.setProperty("display",     "flex",    "important");
+    element.style.setProperty("visibility",  "visible", "important");
+    element.style.setProperty("opacity",     "1",       "important");
+    element.style.setProperty("z-index",     "999999",  "important");
+    element.style.setProperty("pointer-events", "all",  "important");
+
+    // Also inject a style tag to override any external CSS targeting this element
+    const styleId = `merchant-sheet-override-${element.id}`;
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = `
+        #${element.id} {
+          display: flex !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          z-index: 999999 !important;
+          pointer-events: all !important;
+        }
+        #${element.id} * {
+          visibility: visible !important;
+          opacity: 1 !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     console.log(`Merchant Sheet | _insertElement complete, isConnected:`, element.isConnected);
   }
 
