@@ -220,7 +220,17 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   }
 
   _replaceHTML(result, content, options) {
+    console.log(`Merchant Sheet | _replaceHTML called, result:`, result, `content:`, content);
+    if (!content) {
+      console.error(`Merchant Sheet | content element is null/undefined in _replaceHTML`);
+      return;
+    }
+    if (!result) {
+      console.error(`Merchant Sheet | result is null/undefined in _replaceHTML`);
+      return;
+    }
     content.replaceChildren(result);
+    console.log(`Merchant Sheet | _replaceHTML complete, element in DOM:`, !!this.element?.isConnected);
   }
 
   _onRender(context, options) {
@@ -508,6 +518,23 @@ async function openMerchantSheet(actor) {
 
   sheet.render(true).then(() => {
     console.log(`Merchant Sheet | Render resolved for ${game.user.name}`);
+    // Force element visible in case Hide Player UI or other modules are hiding it
+    setTimeout(() => {
+      const el = sheet.element;
+      if (el) {
+        el.style.display    = "";
+        el.style.visibility = "visible";
+        el.style.opacity    = "1";
+        el.style.zIndex     = "9999";
+        el.style.position   = "fixed";
+        el.style.top        = "50%";
+        el.style.left       = "50%";
+        el.style.transform  = "translate(-50%, -50%)";
+        console.log(`Merchant Sheet | Element forced visible:`, el.id, el.style.cssText);
+      } else {
+        console.warn(`Merchant Sheet | No element found after render`);
+      }
+    }, 100);
   }).catch(e => {
     console.error(`Merchant Sheet | Render error:`, e);
     _openSheets.delete(actor.id);
@@ -540,7 +567,7 @@ Hooks.once("init", () => {
   });
 
   // Register MerchantSheet as a proper actor sheet
-  Actors.registerSheet("merchant-sheet", MerchantSheetAdapter, {
+  foundry.documents.collections.Actors.registerSheet("merchant-sheet", MerchantSheetAdapter, {
     types:       ["npc"],
     makeDefault: false,
     label:       "Merchant Sheet",
