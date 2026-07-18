@@ -41,16 +41,19 @@ function handleSocketEvent({ type, payload }) {
 function emitToAll(type, payload = {}) {
   console.log(`Merchant Sheet | Emitting: type=${type}`, payload);
 
-  // Primary — socket (requires world restart after first install to work)
+  // Primary — socket
   if (game.socket) {
     game.socket.emit(SOCKET_KEY, { type, payload });
   }
 
-  // Secondary fallback — write a world setting that all clients watch
-  // This works even if the socket namespace was not registered yet
-  game.settings.set(MODULE_ID, "_broadcast", JSON.stringify({
-    type, payload, ts: Date.now()
-  })).catch(() => {});
+  // Fallback — world setting change fires onChange on all clients
+  // Use random nonce to ensure onChange always fires even with same type+payload
+  const nonce = Math.random().toString(36).slice(2);
+  const broadcastValue = JSON.stringify({ type, payload, nonce });
+  console.log(`Merchant Sheet | Setting broadcast value:`, broadcastValue);
+  game.settings.set(MODULE_ID, "_broadcast", broadcastValue)
+    .then(() => console.log("Merchant Sheet | Setting broadcast successful"))
+    .catch(e => console.error("Merchant Sheet | Setting broadcast failed:", e));
 
   // Handle locally since emitter does not receive its own broadcast
   console.log(`Merchant Sheet | Handling locally: type=${type}`);
@@ -459,7 +462,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 // flags.core.sheetClass is set to "merchant-sheet.MerchantSheetAdapter"
 // Foundry routes to it. It immediately opens the real MerchantSheet instead.
 
-class MerchantSheetAdapter extends ActorSheet {
+class MerchantSheetAdapter extends foundry.appv1.sheets.ActorSheet {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
       classes: ["merchant-sheet-adapter"],
