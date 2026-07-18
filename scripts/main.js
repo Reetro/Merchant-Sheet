@@ -12,6 +12,7 @@ const SOCKET_KEY = `module.${MODULE_ID}`;
 // Called on ALL clients including non-emitting ones
 
 function handleSocketEvent({ type, payload }) {
+  console.log(`Merchant Sheet | Socket received: type=${type}`, payload);
   switch (type) {
 
     case "openMerchant": {
@@ -22,7 +23,6 @@ function handleSocketEvent({ type, payload }) {
     }
 
     case "closeShop": {
-      // Close any open merchant sheets on non-GM clients
       if (!game.user.isGM) {
         _openSheets.forEach(sheet => sheet.close());
         _openSheets.clear();
@@ -33,9 +33,21 @@ function handleSocketEvent({ type, payload }) {
 }
 
 function emitToAll(type, payload = {}) {
-  // Emit to all OTHER clients
-  game.socket.emit(SOCKET_KEY, { type, payload });
-  // Also handle locally since emitter does not receive its own broadcast
+  console.log(`Merchant Sheet | Emitting: type=${type}`, payload);
+
+  // Primary — socket (requires world restart after first install to work)
+  if (game.socket) {
+    game.socket.emit(SOCKET_KEY, { type, payload });
+  }
+
+  // Secondary fallback — write a world setting that all clients watch
+  // This works even if the socket namespace was not registered yet
+  game.settings.set(MODULE_ID, "_broadcast", JSON.stringify({
+    type, payload, ts: Date.now()
+  })).catch(() => {});
+
+  // Handle locally since emitter does not receive its own broadcast
+  console.log(`Merchant Sheet | Handling locally: type=${type}`);
   handleSocketEvent({ type, payload });
 }
 
@@ -418,6 +430,9 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   // ─── Broadcast to all players ─────────────────────────────────────────────────
 
   _broadcastToAll() {
+    console.log(`Merchant Sheet | Show to All clicked for actor: ${this.actor.id} (${this.actor.name})`);
+    console.log(`Merchant Sheet | Socket key: ${SOCKET_KEY}`);
+    console.log(`Merchant Sheet | Socket connected:`, !!game.socket);
     emitToAll("openMerchant", { actorId: this.actor.id });
     ui.notifications.info("Merchant Sheet: Shop shown to all players.");
   }
@@ -474,8 +489,27 @@ async function openMerchantSheet(actor) {
 Hooks.once("init", () => {
   console.log("Merchant Sheet | Initialising");
 
-  // Register MerchantSheet as a proper actor sheet so Foundry routes to it
-  // via flags.core.sheetClass on individual actors
+  // Register broadcast setting — used as socket fallback
+  // All clients watch this setting for changes
+  game.settings.register(MODULE_ID, "_broadcast", {
+    scope:   "world",
+    config:  false,
+    type:    String,
+    default: "",
+    onChange: value => {
+      if (!value) return;
+      try {
+        const { type, payload } = JSON.parse(value);
+        console.log(`Merchant Sheet | Setting change received: type=${type}`, payload);
+        // Only handle on non-GM clients — GM handles locally in emitToAll
+        if (!game.user.isGM) handleSocketEvent({ type, payload });
+      } catch (e) {
+        console.error("Merchant Sheet | Failed to parse broadcast setting", e);
+      }
+    },
+  });
+
+  // Register MerchantSheet as a proper actor sheet
   Actors.registerSheet("merchant-sheet", MerchantSheetAdapter, {
     types:       ["npc"],
     makeDefault: false,
@@ -486,8 +520,10 @@ Hooks.once("init", () => {
 Hooks.once("ready", () => {
   console.log("Merchant Sheet | Ready");
 
+  console.log(`Merchant Sheet | Registering socket listener on key: ${SOCKET_KEY}`);
   // Register socket listener
   game.socket.on(SOCKET_KEY, handleSocketEvent);
+  console.log(`Merchant Sheet | Socket listener registered`);
 });
 
 // ─── Actor directory right-click ──────────────────────────────────────────────
