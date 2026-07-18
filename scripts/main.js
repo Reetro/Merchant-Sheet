@@ -23,9 +23,15 @@ function handleSocketEvent({ type, payload }) {
     }
 
     case "closeShop": {
+      // Close all open merchant sheets on non-GM clients
       if (!game.user.isGM) {
         _openSheets.forEach(sheet => sheet.close());
         _openSheets.clear();
+      }
+      // GM closes too
+      if (game.user.isGM && payload.actorId) {
+        const s = _openSheets.get(payload.actorId);
+        if (s) { s.close(); _openSheets.delete(payload.actorId); }
       }
       break;
     }
@@ -438,7 +444,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   }
 
   _closeForAll() {
-    emitToAll("closeShop", {});
+    emitToAll("closeShop", { actorId: this.actor.id });
     ui.notifications.info("Merchant Sheet: Shop closed for all players.");
   }
 }
@@ -468,16 +474,20 @@ class MerchantSheetAdapter extends ActorSheet {
 const _openSheets = new Map();
 
 async function openMerchantSheet(actor) {
-  // Ensure Foundry knows to use our sheet for this actor
-  const currentSheet = actor.getFlag("core", "sheetClass");
-  if (currentSheet !== "merchant-sheet.MerchantSheetAdapter") {
-    await actor.setFlag("core", "sheetClass", "merchant-sheet.MerchantSheetAdapter");
+  // Only GM can set the sheetClass flag — players skip this
+  if (game.user.isGM) {
+    const currentSheet = actor.getFlag("core", "sheetClass");
+    if (currentSheet !== "merchant-sheet.MerchantSheetAdapter") {
+      await actor.setFlag("core", "sheetClass", "merchant-sheet.MerchantSheetAdapter");
+    }
   }
 
   if (_openSheets.has(actor.id) && !_openSheets.get(actor.id).closed) {
     _openSheets.get(actor.id).bringToTop?.();
     return;
   }
+
+  console.log(`Merchant Sheet | Rendering sheet for: ${actor.name}`);
   const sheet = new MerchantSheet(actor);
   sheet.render(true);
   sheet.addEventListener("close", () => _openSheets.delete(actor.id));
