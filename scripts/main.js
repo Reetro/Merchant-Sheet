@@ -102,7 +102,6 @@ function groupByCategory(items) {
 
 export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   static DEFAULT_OPTIONS = {
-    id:    "merchant-sheet",
     window: {
       title:       "Merchant",
       resizable:   true,
@@ -115,18 +114,19 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   static PARTS = { main: { template: false } };
 
   constructor(actor, options = {}) {
-    super(options);
-    this.actor         = actor;
-    this._collapsed    = {};
-    this._isGM         = game.user.isGM;
+    // Give each merchant a unique app id based on actor id
+    super(foundry.utils.mergeObject(options, {
+      id: `merchant-sheet-${actor.id}`,
+    }));
+    this.actor      = actor;
+    this._collapsed = {};
+    this._isGM      = game.user.isGM;
   }
 
   get title() { return `Shop — ${this.actor.name}`; }
 
-  // Allow any user to render this application regardless of actor permissions
-  _canRender(options) {
-    return; // returning undefined (not false) allows render to proceed
-  }
+  // Always allow rendering regardless of user permission level
+  _canRender(options) { return; }
 
   async _renderHTML(context, options) {
     const data     = getMerchantData(this.actor);
