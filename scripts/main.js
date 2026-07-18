@@ -483,6 +483,28 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   }
 }
 
+// ─── MerchantSheetAdapter (v2) ────────────────────────────────────────────────
+// Extends ActorSheetV2 so Foundry's sheet registration system works correctly.
+// When this sheet is activated it immediately opens our custom MerchantSheet
+// instead of rendering any actor sheet UI.
+
+class MerchantSheetAdapter extends foundry.applications.sheets.ActorSheetV2 {
+  static DEFAULT_OPTIONS = {
+    ...super.DEFAULT_OPTIONS,
+    position: { width: 1, height: 1 },
+    window: { title: "Merchant Sheet", resizable: false },
+  };
+
+  // Override render to open our custom sheet instead
+  async render(options = {}) {
+    openMerchantSheet(this.document);
+  }
+
+  // Implement required abstract method
+  async _renderHTML() { return document.createElement("div"); }
+  _replaceHTML() {}
+}
+
 // ─── Singleton store ──────────────────────────────────────────────────────────
 
 const _openSheets = new Map();
@@ -496,6 +518,14 @@ async function openMerchantSheet(actor) {
   }
 
   console.log(`Merchant Sheet | Opening for ${actor.name} (${game.user.name})`);
+
+  // Set sheetClass so Foundry routes this actor to our adapter on next open
+  if (game.user.isGM) {
+    const current = actor.getFlag("core", "sheetClass");
+    if (current !== "merchant-sheet.MerchantSheetAdapter") {
+      actor.setFlag("core", "sheetClass", "merchant-sheet.MerchantSheetAdapter").catch(() => {});
+    }
+  }
   const sheet = new MerchantSheet(actor);
   _openSheets.set(actor.id, sheet);
   sheet.addEventListener("close", () => _openSheets.delete(actor.id));
@@ -530,7 +560,11 @@ async function openMerchantSheet(actor) {
 Hooks.once("init", () => {
   console.log("Merchant Sheet | Initialising");
 
-
+  foundry.documents.collections.Actors.registerSheet("merchant-sheet", MerchantSheetAdapter, {
+    types:       ["npc"],
+    makeDefault: false,
+    label:       "Merchant Sheet",
+  });
 });
 
 // Register socketlib socket — must be in the "socketlib.ready" hook
@@ -565,23 +599,23 @@ Hooks.once("ready", () => {
   console.log("Merchant Sheet | Ready — socket status:", _socket ? "registered" : "FAILED");
 });
 
-// ─── Actor directory right-click ──────────────────────────────────────────────
+// ─── Actor directory double-click intercept ───────────────────────────────────
 
-// Intercept double-click on actor in directory
 Hooks.on("renderActorDirectory", (app, html) => {
   const root = html instanceof HTMLElement ? html : html[0];
   if (!root) return;
   root.querySelectorAll(".document[data-document-id]").forEach(el => {
     el.addEventListener("dblclick", e => {
-      const actorId = el.dataset.documentId;
-      const actor   = game.actors.get(actorId);
+      const actor = game.actors.get(el.dataset.documentId);
       if (!actor?.getFlag("merchant-sheet", "inventory")) return;
       e.stopPropagation();
       e.preventDefault();
       openMerchantSheet(actor);
-    }, true); // capture phase so we fire before Foundry's handler
+    }, true); // capture phase fires before Foundry's handler
   });
 });
+
+// ─── Actor directory right-click ──────────────────────────────────────────────
 
 Hooks.on("getActorDirectoryEntryContext", (html, options) => {
   options.unshift({
