@@ -131,6 +131,13 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   // Always allow rendering regardless of user permission level
   _canRender(options) { return; }
 
+  // Force insert element into document.body since isConnected is false otherwise
+  async _insertElement(element, options) {
+    console.log(`Merchant Sheet | _insertElement called, appending to body`);
+    document.body.appendChild(element);
+    console.log(`Merchant Sheet | _insertElement complete, isConnected:`, element.isConnected);
+  }
+
   async _renderHTML(context, options) {
     const data     = getMerchantData(this.actor);
     const groups   = groupByCategory(data.items || []);
