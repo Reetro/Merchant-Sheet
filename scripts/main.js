@@ -387,12 +387,11 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   // ─── Broadcast to all players ─────────────────────────────────────────────────
 
   _broadcastToAll() {
-    // Force show UI on all clients then open the merchant sheet
+    // Send to all connected clients — open the merchant sheet and show UI
     game.socket.emit(SOCKET_KEY, {
-      action:  "showUI",
+      action:  "openMerchant",
       actorId: this.actor.id,
     });
-    // Also open locally
     ui.notifications.info("Merchant Sheet: Shop shown to all players.");
   }
 
@@ -432,50 +431,44 @@ Hooks.once("ready", () => {
   // Socket listener — open shop or show/hide UI on all clients when GM broadcasts
   game.socket.on(SOCKET_KEY, data => {
     if (data.action === "openMerchant") {
+      // Force all UI elements visible first
+      document.querySelectorAll("#ui-top, #ui-bottom, #ui-left, #ui-right, #navigation, #controls, #players, #hotbar, #sidebar").forEach(el => {
+        el.style.display      = "";
+        el.style.visibility   = "";
+        el.style.opacity      = "";
+        el.style.pointerEvents = "";
+      });
       const actor = game.actors.get(data.actorId);
       if (actor) openMerchantSheet(actor);
     }
-    if (data.action === "showUI") {
-      // Force show all UI elements — counteract hide player UI module
-      document.querySelectorAll("#ui-top, #ui-bottom, #ui-left, #ui-right, #navigation, #controls, #players, #hotbar, #sidebar").forEach(el => {
-        el.style.display = "";
-        el.style.visibility = "";
-        el.style.opacity = "";
-      });
-      // Also re-open merchant sheet if actorId provided
-      if (data.actorId) {
-        const actor = game.actors.get(data.actorId);
-        if (actor) openMerchantSheet(actor);
-      }
-    }
     if (data.action === "hideUI") {
-      // Hide all UI elements for players
       if (!game.user.isGM) {
         document.querySelectorAll("#ui-top, #ui-bottom, #ui-left, #ui-right, #navigation, #controls, #players, #hotbar, #sidebar").forEach(el => {
           el.style.visibility = "hidden";
         });
+        // Close any open merchant sheets
+        _openSheets.forEach(sheet => sheet.close());
       }
     }
   });
 });
 
 // ─── Intercept actor sheet open for merchants ─────────────────────────────────
+// Use preRenderActorSheet to block the NPC sheet before it appears
 
-Hooks.on("renderActorSheet", (sheet, html) => {
+Hooks.on("preRenderActorSheet", (sheet) => {
   const actor = sheet.actor;
   if (!actor) return;
-
-  // Check if this actor has merchant data stored
   const data = actor.getFlag("merchant-sheet", "inventory");
   if (!data) return;
 
-  // Close the default NPC sheet and open our merchant window instead
-  sheet.close({ force: true });
-  setTimeout(() => openMerchantSheet(actor), 50);
+  // Return false to prevent the default sheet from rendering
+  // Then open our merchant sheet instead
+  setTimeout(() => openMerchantSheet(actor), 0);
+  return false;
 });
 
 // Also intercept the actor directory double-click
-Hooks.on("ActorDirectory.renderEntry", () => {});
 Hooks.on("getActorDirectoryEntryContext", (html, options) => {
   options.unshift({
     name:      "Open Shop",
