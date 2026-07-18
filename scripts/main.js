@@ -33,9 +33,10 @@ function emitToAll(type, payload = {}) {
     return;
   }
   if (type === "openMerchant") {
-    // executeForEveryone takes the registered string name, not the function
+    console.log("Merchant Sheet | Calling executeForEveryone remoteOpenMerchant", payload.actorId);
     _socket.executeForEveryone("remoteOpenMerchant", payload.actorId);
   } else if (type === "closeShop") {
+    console.log("Merchant Sheet | Calling executeForEveryone remoteCloseShop");
     _socket.executeForEveryone("remoteCloseShop", payload.actorId);
   }
 }
@@ -542,10 +543,27 @@ Hooks.once("init", () => {
 
 // Register socketlib socket — must be in the "socketlib.ready" hook
 Hooks.once("socketlib.ready", () => {
+  console.log("Merchant Sheet | socketlib.ready fired");
   _socket = socketlib.registerModule(MODULE_ID);
   _socket.register("remoteOpenMerchant", _remoteOpenMerchant);
   _socket.register("remoteCloseShop",    _remoteCloseShop);
-  console.log("Merchant Sheet | Socketlib registered");
+  // Store on module object so it can be inspected from console
+  game.modules.get(MODULE_ID)._socket = _socket;
+  console.log("Merchant Sheet | Socketlib registered successfully", _socket);
+});
+
+// Fallback if socketlib.ready already fired before our module loaded
+Hooks.once("ready", () => {
+  if (!_socket && typeof socketlib !== "undefined") {
+    console.log("Merchant Sheet | Late socketlib registration");
+    _socket = socketlib.registerModule(MODULE_ID);
+    _socket.register("remoteOpenMerchant", _remoteOpenMerchant);
+    _socket.register("remoteCloseShop",    _remoteCloseShop);
+    game.modules.get(MODULE_ID)._socket = _socket;
+    console.log("Merchant Sheet | Late socketlib registered", _socket);
+  } else if (!_socket) {
+    console.error("Merchant Sheet | socketlib not available at ready!");
+  }
 });
 
 Hooks.once("ready", () => {
