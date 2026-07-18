@@ -542,21 +542,35 @@ Hooks.once("init", () => {
 });
 
 // Register socketlib socket — must be in the "socketlib.ready" hook
-Hooks.once("socketlib.ready", () => {
-  console.log("Merchant Sheet | socketlib.ready fired");
+// Register socketlib — handles both cases:
+// 1. socketlib.ready fires before our ready hook
+// 2. Our ready hook fires before socketlib.ready
+
+function _registerSocketlib() {
+  if (_socket) return; // already registered
   _socket = socketlib.registerModule(MODULE_ID);
   _socket.register("remoteOpenMerchant", _remoteOpenMerchant);
   _socket.register("remoteCloseShop",    _remoteCloseShop);
-  // Store on module object so it can be inspected from console
   game.modules.get(MODULE_ID)._socket = _socket;
-  console.log("Merchant Sheet | Socketlib registered successfully", _socket);
+  console.log("Merchant Sheet | Socketlib registered successfully");
+}
+
+Hooks.once("socketlib.ready", () => {
+  console.log("Merchant Sheet | socketlib.ready fired");
+  _registerSocketlib();
 });
 
 Hooks.once("ready", () => {
-  console.log("Merchant Sheet | Ready — socket status:", _socket ? "registered" : "NOT REGISTERED");
+  // If socketlib.ready already fired _socket is set, otherwise try now
   if (!_socket) {
-    console.error("Merchant Sheet | socketlib.ready did not fire before ready — check socketlib is enabled and loads before merchant-sheet");
+    if (typeof socketlib !== "undefined") {
+      console.log("Merchant Sheet | Registering socketlib in ready hook");
+      _registerSocketlib();
+    } else {
+      console.error("Merchant Sheet | socketlib is not available — is it installed and enabled?");
+    }
   }
+  console.log("Merchant Sheet | Ready — socket status:", _socket ? "registered" : "FAILED");
 });
 
 // ─── Actor directory right-click ──────────────────────────────────────────────
