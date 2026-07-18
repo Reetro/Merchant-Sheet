@@ -2,22 +2,47 @@
   "id": "merchant-sheet",
   "title": "Merchant Sheet",
   "description": "A shop window that displays items for sale. Drag items from compendiums onto it. Right-click any token to open it for all connected players.",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "compatibility": {
     "minimum": "12",
     "verified": "14"
   },
-  "authors": [{ "name": "Reetro", "url": "https://github.com/Reetro" }],
+  "authors": [
+    {
+      "name": "Reetro",
+      "url": "https://github.com/Reetro"
+    }
+  ],
   "relationships": {
-    "systems": [{ "id": "dnd5e", "type": "system", "compatibility": { "minimum": "3.0.0" } }]
+    "systems": [
+      {
+        "id": "dnd5e",
+        "type": "system",
+        "compatibility": {
+          "minimum": "3.0.0"
+        }
+      }
+    ],
+    "requires": [
+      {
+        "id": "socketlib",
+        "type": "module",
+        "compatibility": {
+          "minimum": "1.0"
+        }
+      }
+    ]
   },
   "url": "https://github.com/Reetro/Merchant-Sheet",
   "manifest": "https://raw.githubusercontent.com/Reetro/Merchant-Sheet/main/module.json",
-  "download": "https://github.com/Reetro/Merchant-Sheet/releases/download/2.1/Merchant-Sheet-main.zip",
+  "download": "https://github.com/Reetro/Merchant-Sheet/releases/download/2.2/merchant-sheet.zip",
   "readme": "https://raw.githubusercontent.com/Reetro/Merchant-Sheet/main/README.md",
   "bugs": "https://github.com/Reetro/Merchant-Sheet/issues",
   "changelog": "https://github.com/Reetro/Merchant-Sheet/releases",
-  "esmodules": ["scripts/main.js"],
-  "styles": ["styles/merchant.css"],
-  "socket": true
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "styles": [
+    "styles/merchant.css"
+  ]
 }

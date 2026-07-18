@@ -6,58 +6,38 @@
 //   - Right-click token to open shop for all connected players
 
 const MODULE_ID  = "merchant-sheet";
-const SOCKET_KEY = `module.${MODULE_ID}`;
 
-// ─── Socket handler ───────────────────────────────────────────────────────────
-// Called on ALL clients including non-emitting ones
+// ─── Socketlib integration ────────────────────────────────────────────────────
+// socketlib handles cross-client execution cleanly with proper permissions
 
-function handleSocketEvent({ type, payload }) {
-  console.log(`Merchant Sheet | Socket received: type=${type}`, payload);
-  switch (type) {
+let _socket;
 
-    case "openMerchant": {
-      const actor = game.actors.get(payload.actorId);
-      if (!actor) return;
-      openMerchantSheet(actor);
-      break;
-    }
+// These functions are called on remote clients by socketlib
+function _remoteOpenMerchant(actorId) {
+  console.log(`Merchant Sheet | remoteOpenMerchant called for ${actorId} on ${game.user.name}`);
+  const actor = game.actors.get(actorId);
+  if (!actor) { console.warn(`Merchant Sheet | Actor ${actorId} not found`); return; }
+  openMerchantSheet(actor);
+}
 
-    case "closeShop": {
-      // Close all open merchant sheets on non-GM clients
-      if (!game.user.isGM) {
-        _openSheets.forEach(sheet => sheet.close());
-        _openSheets.clear();
-      }
-      // GM closes too
-      if (game.user.isGM && payload.actorId) {
-        const s = _openSheets.get(payload.actorId);
-        if (s) { s.close(); _openSheets.delete(payload.actorId); }
-      }
-      break;
-    }
-  }
+function _remoteCloseShop(actorId) {
+  console.log(`Merchant Sheet | remoteCloseShop called on ${game.user.name}`);
+  _openSheets.forEach(sheet => sheet.close());
+  _openSheets.clear();
 }
 
 function emitToAll(type, payload = {}) {
-  console.log(`Merchant Sheet | Emitting: type=${type}`, payload);
-
-  // Primary — socket
-  if (game.socket) {
-    game.socket.emit(SOCKET_KEY, { type, payload });
+  console.log(`Merchant Sheet | emitToAll type=${type}`, payload);
+  if (!_socket) {
+    console.error("Merchant Sheet | socketlib not initialised");
+    return;
   }
-
-  // Fallback — world setting change fires onChange on all clients
-  // Use random nonce to ensure onChange always fires even with same type+payload
-  const nonce = Math.random().toString(36).slice(2);
-  const broadcastValue = JSON.stringify({ type, payload, nonce });
-  console.log(`Merchant Sheet | Setting broadcast value:`, broadcastValue);
-  game.settings.set(MODULE_ID, "_broadcast", broadcastValue)
-    .then(() => console.log("Merchant Sheet | Setting broadcast successful"))
-    .catch(e => console.error("Merchant Sheet | Setting broadcast failed:", e));
-
-  // Handle locally since emitter does not receive its own broadcast
-  console.log(`Merchant Sheet | Handling locally: type=${type}`);
-  handleSocketEvent({ type, payload });
+  if (type === "openMerchant") {
+    // Execute on all clients including self
+    _socket.executeForEveryone(_remoteOpenMerchant, payload.actorId);
+  } else if (type === "closeShop") {
+    _socket.executeForEveryone(_remoteCloseShop, payload.actorId);
+  }
 }
 
 // ─── Data Store ───────────────────────────────────────────────────────────────
@@ -553,26 +533,6 @@ async function openMerchantSheet(actor) {
 Hooks.once("init", () => {
   console.log("Merchant Sheet | Initialising");
 
-  // Register broadcast setting — used as socket fallback
-  // All clients watch this setting for changes
-  game.settings.register(MODULE_ID, "_broadcast", {
-    scope:   "world",
-    config:  false,
-    type:    String,
-    default: "",
-    onChange: value => {
-      if (!value) return;
-      try {
-        const { type, payload } = JSON.parse(value);
-        console.log(`Merchant Sheet | Setting change received: type=${type}`, payload);
-        // Only handle on non-GM clients — GM handles locally in emitToAll
-        if (!game.user.isGM) handleSocketEvent({ type, payload });
-      } catch (e) {
-        console.error("Merchant Sheet | Failed to parse broadcast setting", e);
-      }
-    },
-  });
-
   // Register MerchantSheet as a proper actor sheet
   foundry.documents.collections.Actors.registerSheet("merchant-sheet", MerchantSheetAdapter, {
     types:       ["npc"],
@@ -581,13 +541,16 @@ Hooks.once("init", () => {
   });
 });
 
+// Register socketlib socket — must be in the "socketlib.ready" hook
+Hooks.once("socketlib.ready", () => {
+  _socket = socketlib.registerModule(MODULE_ID);
+  _socket.register("remoteOpenMerchant", _remoteOpenMerchant);
+  _socket.register("remoteCloseShop",    _remoteCloseShop);
+  console.log("Merchant Sheet | Socketlib registered");
+});
+
 Hooks.once("ready", () => {
   console.log("Merchant Sheet | Ready");
-
-  console.log(`Merchant Sheet | Registering socket listener on key: ${SOCKET_KEY}`);
-  // Register socket listener
-  game.socket.on(SOCKET_KEY, handleSocketEvent);
-  console.log(`Merchant Sheet | Socket listener registered`);
 });
 
 // ─── Actor directory right-click ──────────────────────────────────────────────
