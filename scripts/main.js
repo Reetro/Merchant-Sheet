@@ -483,28 +483,6 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   }
 }
 
-// ─── MerchantSheetAdapter (v2) ────────────────────────────────────────────────
-// Extends ActorSheetV2 so Foundry's sheet registration system works correctly.
-// When this sheet is activated it immediately opens our custom MerchantSheet
-// instead of rendering any actor sheet UI.
-
-class MerchantSheetAdapter extends foundry.applications.sheets.ActorSheetV2 {
-  static DEFAULT_OPTIONS = {
-    ...super.DEFAULT_OPTIONS,
-    position: { width: 1, height: 1 },
-    window: { title: "Merchant Sheet", resizable: false },
-  };
-
-  // Override render to open our custom sheet instead
-  async render(options = {}) {
-    openMerchantSheet(this.document);
-  }
-
-  // Implement required abstract method
-  async _renderHTML() { return document.createElement("div"); }
-  _replaceHTML() {}
-}
-
 // ─── Singleton store ──────────────────────────────────────────────────────────
 
 const _openSheets = new Map();
@@ -553,6 +531,21 @@ async function openMerchantSheet(actor) {
     console.error(`Merchant Sheet | Render error:`, e);
     _openSheets.delete(actor.id);
   });
+}
+
+// ─── MerchantSheetAdapter (v2) ────────────────────────────────────────────────
+// Registered with Foundry so double-clicking the actor in the directory routes
+// to our custom MerchantSheet instead of the default NPC sheet.
+
+class MerchantSheetAdapter extends foundry.applications.sheets.ActorSheetV2 {
+  // Override render — when Foundry tries to open this sheet, open ours instead
+  async render(options = {}) {
+    openMerchantSheet(this.document);
+  }
+
+  // Required stubs
+  async _renderHTML() { return document.createElement("div"); }
+  _replaceHTML() {}
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
