@@ -123,6 +123,11 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
   get title() { return `Shop — ${this.actor.name}`; }
 
+  // Allow any user to render this application regardless of actor permissions
+  _canRender(options) {
+    return; // returning undefined (not false) allows render to proceed
+  }
+
   async _renderHTML(context, options) {
     const data     = getMerchantData(this.actor);
     const groups   = groupByCategory(data.items || []);
@@ -474,24 +479,37 @@ class MerchantSheetAdapter extends ActorSheet {
 const _openSheets = new Map();
 
 async function openMerchantSheet(actor) {
-  // Only GM can set the sheetClass flag — players skip this
+  // Only GM can set the sheetClass flag
   if (game.user.isGM) {
-    const currentSheet = actor.getFlag("core", "sheetClass");
-    if (currentSheet !== "merchant-sheet.MerchantSheetAdapter") {
-      await actor.setFlag("core", "sheetClass", "merchant-sheet.MerchantSheetAdapter");
+    try {
+      const currentSheet = actor.getFlag("core", "sheetClass");
+      if (currentSheet !== "merchant-sheet.MerchantSheetAdapter") {
+        await actor.setFlag("core", "sheetClass", "merchant-sheet.MerchantSheetAdapter");
+      }
+    } catch(e) {
+      console.warn("Merchant Sheet | Could not set sheetClass flag:", e.message);
     }
   }
 
+  // If already open bring to front
   if (_openSheets.has(actor.id) && !_openSheets.get(actor.id).closed) {
     _openSheets.get(actor.id).bringToTop?.();
     return;
   }
 
-  console.log(`Merchant Sheet | Rendering sheet for: ${actor.name}`);
-  const sheet = new MerchantSheet(actor);
-  sheet.render(true);
-  sheet.addEventListener("close", () => _openSheets.delete(actor.id));
-  _openSheets.set(actor.id, sheet);
+  try {
+    console.log(`Merchant Sheet | Creating sheet for ${actor.name} (user: ${game.user.name})`);
+    const sheet = new MerchantSheet(actor, {
+      // Force render regardless of permission level
+      permission: CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER,
+    });
+    await sheet.render({ force: true });
+    console.log(`Merchant Sheet | Sheet rendered successfully`);
+    sheet.addEventListener("close", () => _openSheets.delete(actor.id));
+    _openSheets.set(actor.id, sheet);
+  } catch(e) {
+    console.error("Merchant Sheet | Failed to render sheet:", e);
+  }
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
