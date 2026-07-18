@@ -1,0 +1,17 @@
+{
+  "id": "merchant-sheet",
+  "title": "Merchant Sheet",
+  "description": "A shop window that displays items for sale. Drag items from compendiums onto it. Right-click any token to open it for all connected players.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "12",
+    "verified": "14"
+  },
+  "authors": [{ "name": "Reetro", "url": "https://github.com/Reetro" }],
+  "relationships": {
+    "systems": [{ "id": "dnd5e", "type": "system", "compatibility": { "minimum": "3.0.0" } }]
+  },
+  "esmodules": ["scripts/main.js"],
+  "styles": ["styles/merchant.css"],
+  "socket": true
+}
