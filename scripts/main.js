@@ -86,12 +86,17 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   }
 
   _buildHTML(data, groups, hasItems) {
-    // Header
+    // Header — portrait is clickable by GM to change icon
     let html = `
       <div class="merchant-header">
-        <img src="${data.img || "icons/svg/mystery-man.svg"}" alt="${data.name}">
+        <div style="position:relative; flex-shrink:0;">
+          <img src="${data.img || "icons/svg/mystery-man.svg"}" alt="${data.name}"
+            id="ms-portrait"
+            style="cursor:${this._isGM ? "pointer" : "default"};"
+            title="${this._isGM ? "Click to change portrait" : ""}">
+          ${this._isGM ? `<div style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,0.6);border-radius:3px;padding:1px 3px;font-size:9px;pointer-events:none;"><i class="fas fa-camera"></i></div>` : ""}
+        </div>
         <span class="merchant-name">${data.name}</span>
-        <span class="merchant-gold"><i class="fas fa-coins"></i> Open Shop</span>
       </div>
       <div class="merchant-body" id="merchant-body">
     `;
@@ -127,7 +132,8 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
     if (this._isGM) {
       html += `<div class="gm-controls">
-        <button id="ms-broadcast"><i class="fas fa-broadcast-tower"></i> Show to All</button>
+        <button id="ms-show-all"><i class="fas fa-eye"></i> Show to All</button>
+        <button id="ms-close-all" style="background:#5a2020; border-color:#8b3333; color:#ffcccc;"><i class="fas fa-times"></i> Close Shop</button>
         <button id="ms-clear"><i class="fas fa-trash"></i> Clear Shop</button>
       </div>`;
     }
@@ -176,6 +182,25 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
       body.addEventListener("drop",      e => { e.preventDefault(); body.classList.remove("drop-zone-active"); this._onDrop(e); });
     }
 
+    // Portrait click — open file picker to change icon (GM only)
+    if (this._isGM) {
+      el.querySelector("#ms-portrait")?.addEventListener("click", async () => {
+        const picker = new FilePicker({
+          type:     "image",
+          current:  getMerchantData(this.actor).img || "",
+          callback: async path => {
+            const data = getMerchantData(this.actor);
+            data.img   = path;
+            await setMerchantData(this.actor, data);
+            // Also update the actor and token portrait
+            await this.actor.update({ img: path, "prototypeToken.texture.src": path });
+            this.render();
+          },
+        });
+        picker.render(true);
+      });
+    }
+
     // Category collapse
     el.querySelectorAll(".category-header").forEach(h => {
       h.addEventListener("click", () => {
@@ -207,8 +232,9 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
       el.querySelectorAll(".delete").forEach(btn => {
         btn.addEventListener("click", e => { e.stopPropagation(); this._removeItem(btn.dataset.itemId); });
       });
-      el.querySelector("#ms-broadcast")?.addEventListener("click", () => this._broadcastToAll());
-      el.querySelector("#ms-clear")?.addEventListener("click",     () => this._clearShop());
+      el.querySelector("#ms-show-all")?.addEventListener("click",   () => this._broadcastToAll());
+      el.querySelector("#ms-close-all")?.addEventListener("click",  () => this._closeForAll());
+      el.querySelector("#ms-clear")?.addEventListener("click",      () => this._clearShop());
     }
   }
 
@@ -361,13 +387,21 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   // ─── Broadcast to all players ─────────────────────────────────────────────────
 
   _broadcastToAll() {
-    // Emit socket event so all connected clients open this merchant
+    // Force show UI on all clients then open the merchant sheet
     game.socket.emit(SOCKET_KEY, {
-      action:  "openMerchant",
+      action:  "showUI",
       actorId: this.actor.id,
     });
-    // Also open locally if not already
-    ui.notifications.info("Merchant Sheet: Shop displayed to all players.");
+    // Also open locally
+    ui.notifications.info("Merchant Sheet: Shop shown to all players.");
+  }
+
+  _closeForAll() {
+    // Tell all non-GM clients to hide their UI
+    game.socket.emit(SOCKET_KEY, { action: "hideUI" });
+    // Close the sheet locally
+    this.close();
+    ui.notifications.info("Merchant Sheet: Shop closed for all players.");
   }
 }
 
@@ -395,16 +429,69 @@ Hooks.once("init", () => {
 Hooks.once("ready", () => {
   console.log("Merchant Sheet | Ready");
 
-  // Socket listener — open shop on all clients when GM broadcasts
+  // Socket listener — open shop or show/hide UI on all clients when GM broadcasts
   game.socket.on(SOCKET_KEY, data => {
     if (data.action === "openMerchant") {
       const actor = game.actors.get(data.actorId);
       if (actor) openMerchantSheet(actor);
     }
+    if (data.action === "showUI") {
+      // Force show all UI elements — counteract hide player UI module
+      document.querySelectorAll("#ui-top, #ui-bottom, #ui-left, #ui-right, #navigation, #controls, #players, #hotbar, #sidebar").forEach(el => {
+        el.style.display = "";
+        el.style.visibility = "";
+        el.style.opacity = "";
+      });
+      // Also re-open merchant sheet if actorId provided
+      if (data.actorId) {
+        const actor = game.actors.get(data.actorId);
+        if (actor) openMerchantSheet(actor);
+      }
+    }
+    if (data.action === "hideUI") {
+      // Hide all UI elements for players
+      if (!game.user.isGM) {
+        document.querySelectorAll("#ui-top, #ui-bottom, #ui-left, #ui-right, #navigation, #controls, #players, #hotbar, #sidebar").forEach(el => {
+          el.style.visibility = "hidden";
+        });
+      }
+    }
   });
 });
 
-// ─── Token right-click context menu ──────────────────────────────────────────
+// ─── Intercept actor sheet open for merchants ─────────────────────────────────
+
+Hooks.on("renderActorSheet", (sheet, html) => {
+  const actor = sheet.actor;
+  if (!actor) return;
+
+  // Check if this actor has merchant data stored
+  const data = actor.getFlag("merchant-sheet", "inventory");
+  if (!data) return;
+
+  // Close the default NPC sheet and open our merchant window instead
+  sheet.close({ force: true });
+  setTimeout(() => openMerchantSheet(actor), 50);
+});
+
+// Also intercept the actor directory double-click
+Hooks.on("ActorDirectory.renderEntry", () => {});
+Hooks.on("getActorDirectoryEntryContext", (html, options) => {
+  options.unshift({
+    name:      "Open Shop",
+    icon:      "<i class='fas fa-store'></i>",
+    condition: li => {
+      const actorId = li.dataset?.documentId ?? li[0]?.dataset?.documentId;
+      const actor   = game.actors.get(actorId);
+      return actor?.getFlag("merchant-sheet", "inventory") !== undefined;
+    },
+    callback: li => {
+      const actorId = li.dataset?.documentId ?? li[0]?.dataset?.documentId;
+      const actor   = game.actors.get(actorId);
+      if (actor) openMerchantSheet(actor);
+    },
+  });
+});
 
 Hooks.on("getTokenContextOptions", (token, options) => {
   options.push({
@@ -419,49 +506,99 @@ Hooks.on("getTokenContextOptions", (token, options) => {
   });
 });
 
+// ─── Token double-click opens merchant sheet ──────────────────────────────────
+
+function hookTokenDoubleClick(token) {
+  if (!token) return;
+  const orig = token._onClickLeft2?.bind(token);
+  token._onClickLeft2 = function(event) {
+    const actor = this.actor;
+    if (actor?.getFlag("merchant-sheet", "inventory") !== undefined) {
+      openMerchantSheet(actor);
+      return;
+    }
+    return orig?.call(this, event);
+  };
+}
+
+Hooks.on("canvasReady", () => {
+  canvas.tokens?.placeables?.forEach(t => hookTokenDoubleClick(t));
+});
+
+Hooks.on("createToken", (tokenDoc) => {
+  const token = canvas.tokens?.get(tokenDoc.id);
+  if (token) hookTokenDoubleClick(token);
+});
+
 // ─── Inject into Create Actor dialog ─────────────────────────────────────────
+// v14 uses getDocumentTypeIcons or renders via ApplicationV2 — intercept both
 
-Hooks.on("renderDialog", (dialog, html) => {
-  if (!dialog.title?.includes("Create Actor")) return;
+function injectMerchantOption(html) {
+  // Try both jQuery and native element
+  const root = html instanceof HTMLElement ? html : html[0];
+  if (!root) return;
 
-  const el   = html.querySelector ? html : { querySelector: s => html[0]?.querySelector(s) };
-  const list = el.querySelector(".document-create ul");
+  // Look for the list of actor types
+  const list = root.querySelector("ul, .document-type-list, .type-list, form ul");
   if (!list) return;
 
+  // Avoid duplicate injection
+  if (list.querySelector("[data-type='merchant-sheet']")) return;
+
   const li = document.createElement("li");
-  li.style.cssText = "display:flex; align-items:center; gap:12px; padding:8px 10px; cursor:pointer; border-radius:4px;";
+  li.dataset.type = "merchant-sheet";
+  li.style.cssText = "display:flex; align-items:center; gap:12px; padding:8px 10px; cursor:pointer; border-radius:4px; list-style:none;";
   li.innerHTML = `
-    <img src="icons/svg/item-bag.svg" style="width:40px; height:40px; border-radius:4px; border:1px solid #555;">
-    <span style="font-size:14px;">Merchant Sheet</span>
-    <input type="radio" name="type" value="merchant-sheet" style="margin-left:auto;">
+    <img src="icons/svg/item-bag.svg" style="width:40px; height:40px; border-radius:4px; border:1px solid #555; flex-shrink:0;">
+    <span style="font-size:14px; flex:1;">Merchant Sheet</span>
+    <input type="radio" name="type" value="merchant-sheet" style="flex-shrink:0;">
   `;
 
   li.addEventListener("click", () => {
+    root.querySelectorAll("input[name='type']").forEach(r => r.checked = false);
     li.querySelector("input").checked = true;
-    list.querySelectorAll("li").forEach(l => l.style.background = "");
+    root.querySelectorAll("li").forEach(l => l.style.background = "");
     li.style.background = "rgba(255,255,255,0.08)";
   });
 
   list.appendChild(li);
+}
 
-  const createBtn = el.querySelector("[data-action='create'], .create-document");
-  if (createBtn) {
-    createBtn.addEventListener("click", async e => {
-      const selected = list.querySelector("input[name='type']:checked");
-      if (selected?.value !== "merchant-sheet") return;
-      e.preventDefault();
-      e.stopPropagation();
-      dialog.close();
-
-      const actor = await Actor.create({
-        name:   "New Merchant",
-        type:   "npc",
-        img:    "icons/svg/item-bag.svg",
-        system: { attributes: { hp: { value: 1, max: 1 } } },
-        prototypeToken: { name: "Merchant", disposition: 1 },
-      });
-
-      openMerchantSheet(actor);
-    }, true);
-  }
+// Hook for legacy Dialog
+Hooks.on("renderDialog", (dialog, html) => {
+  if (!dialog.title?.includes("Create")) return;
+  if (!dialog.title?.includes("Actor")) return;
+  injectMerchantOption(html instanceof jQuery ? html[0] : html);
+  interceptCreateButton(dialog, html instanceof jQuery ? html[0] : html);
 });
+
+// Hook for ApplicationV2 in v14
+Hooks.on("renderActorDirectory", () => {});
+Hooks.on("renderApplication", (app, html) => {
+  const title = app.title || app.options?.window?.title || "";
+  if (!title.includes("Create") || !title.includes("Actor")) return;
+  injectMerchantOption(html instanceof jQuery ? html[0] : html);
+  interceptCreateButton(app, html instanceof jQuery ? html[0] : html);
+});
+
+function interceptCreateButton(app, root) {
+  const btn = root?.querySelector("button[type='submit'], [data-action='create'], .create, footer button");
+  if (!btn) return;
+  btn.addEventListener("click", async e => {
+    const selected = root.querySelector("input[name='type']:checked");
+    if (selected?.value !== "merchant-sheet") return;
+    e.preventDefault();
+    e.stopPropagation();
+    app.close?.();
+
+    const actor = await Actor.create({
+      name:   "New Merchant",
+      type:   "npc",
+      img:    "icons/svg/item-bag.svg",
+      system: { attributes: { hp: { value: 1, max: 1 } } },
+      prototypeToken: { name: "Merchant", disposition: 1 },
+    });
+
+    openMerchantSheet(actor);
+  }, true);
+}
