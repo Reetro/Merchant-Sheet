@@ -611,25 +611,44 @@ Hooks.on("renderActorDirectory", (app, html) => {
 
 });
 
-// ─── Add Create Merchant to Actor Directory header ────────────────────────────
-// getActorDirectoryHeaderButtons is the correct v14 hook for adding sidebar buttons
+// ─── Add Create Merchant to Actor Directory ──────────────────────────────────
 
-Hooks.on("getActorDirectoryHeaderButtons", (app, buttons) => {
-  buttons.unshift({
-    label:  "Create Merchant",
-    icon:   "fas fa-store",
-    class:  "create-merchant",
-    onclick: async () => {
-      const actor = await Actor.create({
-        name:   "New Merchant",
-        type:   "npc",
-        img:    "icons/svg/item-bag.svg",
-        system: { attributes: { hp: { value: 1, max: 1 } } },
-        prototypeToken: { name: "Merchant", disposition: 1 },
-      });
-      openMerchantSheet(actor);
-    },
+async function createMerchantActor() {
+  const actor = await Actor.create({
+    name:   "New Merchant",
+    type:   "npc",
+    img:    "icons/svg/item-bag.svg",
+    system: { attributes: { hp: { value: 1, max: 1 } } },
+    prototypeToken: { name: "Merchant", disposition: 1 },
   });
+  openMerchantSheet(actor);
+}
+
+// Try v14 header controls hook
+Hooks.on("getActorDirectoryHeaderControls", (app, controls) => {
+  controls.push({
+    label:  "Create Merchant",
+    icon:   "fa-store",
+    action: "createMerchant",
+    onclick: createMerchantActor,
+  });
+});
+
+// Also inject directly into the rendered HTML as a fallback
+Hooks.on("renderActorDirectory", (app, html) => {
+  const root = html instanceof HTMLElement ? html : html[0];
+  if (!root || root.querySelector(".create-merchant-btn")) return;
+
+  // Try to find the footer or action buttons area
+  const footer = root.querySelector("footer, .directory-footer, .action-buttons");
+  if (!footer) return;
+
+  const btn = document.createElement("button");
+  btn.type      = "button";
+  btn.className = "create-merchant-btn";
+  btn.innerHTML = `<i class="fas fa-store"></i> Create Merchant`;
+  btn.addEventListener("click", createMerchantActor);
+  footer.appendChild(btn);
 });
 
 // ─── Actor directory right-click ──────────────────────────────────────────────
