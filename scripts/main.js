@@ -418,3 +418,50 @@ Hooks.on("getTokenContextOptions", (token, options) => {
     },
   });
 });
+
+// ─── Inject into Create Actor dialog ─────────────────────────────────────────
+
+Hooks.on("renderDialog", (dialog, html) => {
+  if (!dialog.title?.includes("Create Actor")) return;
+
+  const el   = html.querySelector ? html : { querySelector: s => html[0]?.querySelector(s) };
+  const list = el.querySelector(".document-create ul");
+  if (!list) return;
+
+  const li = document.createElement("li");
+  li.style.cssText = "display:flex; align-items:center; gap:12px; padding:8px 10px; cursor:pointer; border-radius:4px;";
+  li.innerHTML = `
+    <img src="icons/svg/item-bag.svg" style="width:40px; height:40px; border-radius:4px; border:1px solid #555;">
+    <span style="font-size:14px;">Merchant Sheet</span>
+    <input type="radio" name="type" value="merchant-sheet" style="margin-left:auto;">
+  `;
+
+  li.addEventListener("click", () => {
+    li.querySelector("input").checked = true;
+    list.querySelectorAll("li").forEach(l => l.style.background = "");
+    li.style.background = "rgba(255,255,255,0.08)";
+  });
+
+  list.appendChild(li);
+
+  const createBtn = el.querySelector("[data-action='create'], .create-document");
+  if (createBtn) {
+    createBtn.addEventListener("click", async e => {
+      const selected = list.querySelector("input[name='type']:checked");
+      if (selected?.value !== "merchant-sheet") return;
+      e.preventDefault();
+      e.stopPropagation();
+      dialog.close();
+
+      const actor = await Actor.create({
+        name:   "New Merchant",
+        type:   "npc",
+        img:    "icons/svg/item-bag.svg",
+        system: { attributes: { hp: { value: 1, max: 1 } } },
+        prototypeToken: { name: "Merchant", disposition: 1 },
+      });
+
+      openMerchantSheet(actor);
+    }, true);
+  }
+});
