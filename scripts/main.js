@@ -580,7 +580,7 @@ Hooks.once("socketlib.ready", () => {
 });
 
 Hooks.once("ready", () => {
-  // If socketlib.ready already fired _socket is set, otherwise try now
+  // Socketlib registration
   if (!_socket) {
     if (typeof socketlib !== "undefined") {
       console.log("Merchant Sheet | Registering socketlib in ready hook");
@@ -590,6 +590,9 @@ Hooks.once("ready", () => {
     }
   }
   console.log("Merchant Sheet | Ready — socket status:", _socket ? "registered" : "FAILED");
+
+  // Watch for Create Actor dialog
+  _dialogObserver.observe(document.body, { childList: true, subtree: true });
 });
 
 // ─── Actor directory double-click intercept ───────────────────────────────────
@@ -611,45 +614,67 @@ Hooks.on("renderActorDirectory", (app, html) => {
 
 });
 
-// ─── Add Create Merchant to Actor Directory ──────────────────────────────────
+// ─── Inject Merchant option into Create Actor dialog ─────────────────────────
+// The Create Actor dialog is a <dialog class="create-document"> with:
+// - <ol class="unlist card"> containing the actor type list items
+// - <button data-action="ok"> as the submit button
 
-async function createMerchantActor() {
+async function createMerchantActor(folder) {
   const actor = await Actor.create({
     name:   "New Merchant",
     type:   "npc",
     img:    "icons/svg/item-bag.svg",
+    folder: folder ?? null,
     system: { attributes: { hp: { value: 1, max: 1 } } },
     prototypeToken: { name: "Merchant", disposition: 1 },
   });
   openMerchantSheet(actor);
 }
 
-// Try v14 header controls hook
-Hooks.on("getActorDirectoryHeaderControls", (app, controls) => {
-  controls.push({
-    label:  "Create Merchant",
-    icon:   "fa-store",
-    action: "createMerchant",
-    onclick: createMerchantActor,
-  });
+// Watch for the Create Actor dialog to appear in the DOM
+const _dialogObserver = new MutationObserver(mutations => {
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes) {
+      if (!(node instanceof HTMLElement)) continue;
+      const dialog = node.matches?.("dialog.create-document")
+        ? node
+        : node.querySelector?.("dialog.create-document");
+      if (!dialog) continue;
+      _injectMerchantIntoDialog(dialog);
+    }
+  }
 });
 
-// Also inject directly into the rendered HTML as a fallback
-Hooks.on("renderActorDirectory", (app, html) => {
-  const root = html instanceof HTMLElement ? html : html[0];
-  if (!root || root.querySelector(".create-merchant-btn")) return;
+function _injectMerchantIntoDialog(dialog) {
+  const list = dialog.querySelector("ol.unlist.card, ol.unlist");
+  if (!list || list.querySelector("[data-type='merchant']")) return;
 
-  // Try to find the footer or action buttons area
-  const footer = root.querySelector("footer, .directory-footer, .action-buttons");
-  if (!footer) return;
+  // Add Merchant Sheet option to the list
+  const li = document.createElement("li");
+  li.dataset.type = "merchant";
+  li.innerHTML = `
+    <label style="cursor:pointer;">
+      <i class="fas fa-store" style="font-size:32px; width:40px; text-align:center;"></i>
+      <span>Merchant Sheet</span>
+      <input type="radio" name="type" value="merchant">
+    </label>
+  `;
+  list.appendChild(li);
 
-  const btn = document.createElement("button");
-  btn.type      = "button";
-  btn.className = "create-merchant-btn";
-  btn.innerHTML = `<i class="fas fa-store"></i> Create Merchant`;
-  btn.addEventListener("click", createMerchantActor);
-  footer.appendChild(btn);
-});
+  // Intercept the ok button
+  const okBtn = dialog.querySelector("[data-action='ok'], button[type='submit']");
+  if (!okBtn) return;
+
+  okBtn.addEventListener("click", async e => {
+    const selected = dialog.querySelector("input[name='type']:checked");
+    if (selected?.value !== "merchant") return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const folder = dialog.querySelector("select[name='folder']")?.value || null;
+    dialog.close?.();
+    await createMerchantActor(folder);
+  }, true);
+}
 
 // ─── Actor directory right-click ──────────────────────────────────────────────
 
