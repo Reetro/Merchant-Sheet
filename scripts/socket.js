@@ -1,6 +1,10 @@
 // socket.js — Socketlib integration for broadcasting shop open/close/scroll/item
 
 import { MODULE_ID } from "./constants.js";
+import { getMerchantData } from "./data.js";
+
+// Local alias used in remote functions (globalThis not available at import time)
+const getMerchantDataLocal = (actor) => actor.getFlag(MODULE_ID, "inventory") || { items: [] };
 
 let _socket;
 
@@ -27,17 +31,32 @@ function _remoteScrollShop({ actorId, scrollTop }) {
   if (body) body.scrollTop = scrollTop;
 }
 
-function _remoteShowItem({ actorId, itemId }) {
+async function _remoteShowItem({ actorId, itemId }) {
   const { _openSheets } = globalThis.__merchantSheet;
   const sheet = _openSheets.get(actorId);
   if (!sheet) return;
-  // Highlight the item row on the player screen
+
+  // Highlight the row
   const row = sheet.element?.querySelector(`[data-item-id="${itemId}"]`);
-  if (!row) return;
-  row.scrollIntoView({ behavior: "smooth", block: "center" });
-  row.style.transition = "background 0.2s";
-  row.style.background = "rgba(255,215,0,0.25)";
-  setTimeout(() => row.style.background = "", 2000);
+  if (row) {
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.style.transition = "background 0.2s";
+    row.style.background = "rgba(255,215,0,0.25)";
+    setTimeout(() => row.style.background = "", 2000);
+  }
+
+  // Open item in split screen
+  const data = getMerchantDataLocal(sheet.actor);
+  const item = data.items?.find(i => i.id === itemId);
+  if (!item) return;
+  sheet._showItemCard(item);
+}
+
+function _remoteCloseItem({ actorId }) {
+  const { _openSheets } = globalThis.__merchantSheet;
+  const sheet = _openSheets.get(actorId);
+  if (!sheet) return;
+  sheet.closeItemPanel();
 }
 
 export function registerSocketlib() {
@@ -47,6 +66,7 @@ export function registerSocketlib() {
   _socket.register("remoteCloseShop",    _remoteCloseShop);
   _socket.register("remoteScrollShop",   _remoteScrollShop);
   _socket.register("remoteShowItem",     _remoteShowItem);
+  _socket.register("remoteCloseItem",    _remoteCloseItem);
   console.log("Merchant Sheet | Socketlib registered");
 }
 
@@ -60,5 +80,7 @@ export function emitToAll(type, payload = {}) {
     _socket.executeForOthers("remoteScrollShop", payload);
   } else if (type === "showItem") {
     _socket.executeForOthers("remoteShowItem", payload);
+  } else if (type === "closeItem") {
+    _socket.executeForOthers("remoteCloseItem", payload);
   }
 }
