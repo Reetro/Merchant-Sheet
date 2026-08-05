@@ -174,6 +174,17 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     // Drop zone
     const body = el.querySelector("#merchant-body");
     if (body) {
+      // Scroll sync — GM scrolling broadcasts to all players
+      if (this._isGM) {
+        let _scrollTimeout;
+        body.addEventListener("scroll", () => {
+          clearTimeout(_scrollTimeout);
+          _scrollTimeout = setTimeout(() => {
+            emitToAll("scrollShop", { actorId: this.actor.id, scrollTop: body.scrollTop });
+          }, 50);
+        });
+      }
+
       body.addEventListener("dragover", e => {
         if (e.dataTransfer.types.includes("text/plain")) {
           e.preventDefault();
@@ -202,7 +213,12 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
         if (e.target.closest(".item-controls")) return;
         const data = getMerchantData(this.actor);
         const item = data.items.find(i => i.id === row.dataset.itemId);
-        if (item) this._showItemCard(item);
+        if (!item) return;
+        this._showItemCard(item);
+        // GM click — broadcast to highlight item on all player screens
+        if (this._isGM) {
+          emitToAll("showItem", { actorId: this.actor.id, itemId: item.id });
+        }
       });
     });
 
