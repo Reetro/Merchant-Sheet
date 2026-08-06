@@ -263,8 +263,14 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   _onRender(context, options) {
     const el = this.element;
 
-    // Reapply split mode height after every render — players only
+    // Enforce fullscreen and split state for players after every render
     if (!this._isGM) {
+      el.style.setProperty("position",      "fixed",  "important");
+      el.style.setProperty("top",           "0",      "important");
+      el.style.setProperty("left",          "0",      "important");
+      el.style.setProperty("width",         "100vw",  "important");
+      el.style.setProperty("transform",     "none",   "important");
+      el.style.setProperty("border-radius", "0",      "important");
       if (this._splitMode) {
         el.style.setProperty("height", "50vh", "important");
       } else {
@@ -392,45 +398,44 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
   // ─── Item card ────────────────────────────────────────────────────────────────
 
-  async _showItemCard(item) {
-    let doc = null;
-
+  async _findItemDoc(item) {
     if (item.uuid) {
-      doc = await fromUuid(item.uuid).catch(() => null);
+      const doc = await fromUuid(item.uuid).catch(() => null);
+      if (doc) return doc;
     }
-    if (!doc) {
-      for (const pack of game.packs.filter(p => p.metadata.type === "Item")) {
-        try {
-          const index = await pack.getIndex({ fields: ["name"] });
-          const entry = index.find(e => e.name.toLowerCase() === item.name.toLowerCase());
-          if (entry) { doc = await pack.getDocument(entry._id); break; }
-        } catch { continue; }
-      }
+    for (const pack of game.packs.filter(p => p.metadata.type === "Item")) {
+      try {
+        const index = await pack.getIndex({ fields: ["name"] });
+        const entry = index.find(e => e.name.toLowerCase() === item.name.toLowerCase());
+        if (entry) { return await pack.getDocument(entry._id); }
+      } catch { continue; }
     }
+    return null;
+  }
 
+  async _showItemCard(item) {
+    const doc = await this._findItemDoc(item);
     if (!doc) {
       ui.notifications.warn(`Merchant Sheet: Could not find "${item.name}" in any compendium.`);
       return;
     }
 
-    // Render the item sheet into a detached element then show in split panel
-    const sheet = doc.sheet;
-    await sheet.render(true);
-
-    // Give the sheet a moment to render then grab its element
-    setTimeout(() => {
-      const sheetEl = sheet.element;
-      if (!sheetEl) return;
-
-      // Clone the rendered content for our panel
-      const clone = sheetEl.cloneNode(true);
-      clone.style.cssText = "position:relative; width:100%; height:100%; box-shadow:none; border:none;";
-
-      // Close the floating sheet window
-      sheet.close({ force: true });
-
-      this.showItemSplitScreen(clone);
-    }, 100);
+    if (this._isGM) {
+      // GM gets a normal draggable Foundry item sheet
+      doc.sheet.render(true);
+    } else {
+      // Players get split screen
+      const sheet = doc.sheet;
+      await sheet.render(true);
+      setTimeout(() => {
+        const sheetEl = sheet.element;
+        if (!sheetEl) return;
+        const clone = sheetEl.cloneNode(true);
+        clone.style.cssText = "position:relative; width:100%; height:100%; box-shadow:none; border:none;";
+        sheet.close({ force: true });
+        this.showItemSplitScreen(clone);
+      }, 100);
+    }
   }
 
   // ─── GM helpers ───────────────────────────────────────────────────────────────
@@ -518,6 +523,8 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   }
 
   _closeForAll() {
+    // Close item panel first
+    this.closeItemPanel();
     emitToAll("closeShop", { actorId: this.actor.id });
     this.close();
     ui.notifications.info("Merchant Sheet: Shop closed for all players.");

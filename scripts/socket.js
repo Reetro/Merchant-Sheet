@@ -19,7 +19,10 @@ function _remoteOpenMerchant(actorId) {
 
 function _remoteCloseShop() {
   const { _openSheets } = globalThis.__merchantSheet;
-  _openSheets.forEach(sheet => sheet.close());
+  _openSheets.forEach(sheet => {
+    sheet.closeItemPanel?.();
+    sheet.close();
+  });
   _openSheets.clear();
 }
 
