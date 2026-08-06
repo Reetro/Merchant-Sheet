@@ -124,17 +124,22 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   }
 
   closeItemPanel() {
-    const panel = document.getElementById("ms-item-panel");
-    if (panel) {
-      panel.style.bottom = "-50vh";
-      setTimeout(() => panel.remove(), 400);
+    if (this._isGM) {
+      // Close the tracked native item sheet
+      this._gmItemSheet?.close?.();
+      this._gmItemSheet = null;
+    } else {
+      // Slide player panel down
+      const panel = document.getElementById("ms-item-panel");
+      if (panel) {
+        panel.style.bottom = "-50vh";
+        setTimeout(() => panel.remove(), 400);
+      }
+      const shopEl = this.element;
+      if (shopEl) shopEl.style.setProperty("height", "100vh", "important");
     }
     this._splitMode = false;
-    // Restore merchant sheet height directly on element
-    const shopEl = this.element;
-    if (shopEl) shopEl.style.setProperty("height", "100vh", "important");
     this.render();
-    // Broadcast to players if GM is closing
     if (this._isGM) emitToAll("closeItem", { actorId: this.actor.id });
   }
 
@@ -394,6 +399,10 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     if (this._isGM) {
       // GM gets a normal draggable Foundry item sheet
       doc.sheet.render(true);
+      // Track that an item is open so the Close Item button appears
+      this._gmItemSheet = doc.sheet;
+      this._splitMode   = true;
+      this.render();
     } else {
       // Players get split screen
       const sheet = doc.sheet;
