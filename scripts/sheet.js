@@ -30,6 +30,12 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
   _canRender(options) { return; }
 
+  // Prevent Foundry's position system from overriding our fullscreen CSS for players
+  setPosition(position = {}) {
+    if (!this._isGM) return this.position;
+    return super.setPosition(position);
+  }
+
   async _insertElement(element, options) {
     document.body.appendChild(element);
 
@@ -66,59 +72,29 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
   // Shrink shop to top half and show item in bottom half
   showItemSplitScreen(itemElement) {
-    const shopEl = this.element;
-    if (!shopEl) return;
-
     this._splitMode = true;
-    // Only resize for players — GM keeps windowed view
-    if (!this._isGM) {
-      shopEl.style.setProperty("height", "50vh", "important");
-    }
 
-    // Remove any existing item panel cleanly (no animation delay for switching)
+    // Remove any existing item panel cleanly
     const existingPanel = document.getElementById("ms-item-panel");
     if (existingPanel) existingPanel.remove();
 
-    // Create item panel — fullscreen split for players, floating popup for GM
+    // Create item panel
     const panel = document.createElement("div");
     panel.id = "ms-item-panel";
-    if (this._isGM) {
-      const shopEl = this.element;
-      const rect   = shopEl?.getBoundingClientRect() ?? { left: 0, bottom: 400, width: 560 };
-      panel.style.cssText = `
-        position: fixed;
-        left: ${rect.left}px;
-        top: ${rect.bottom + 8}px;
-        width: ${rect.width}px;
-        height: 400px;
-        z-index: 999999;
-        background: var(--color-bg-primary, #1a1a1a);
-        border: 1px solid var(--color-border-dark, #444);
-        border-radius: 6px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-        overflow: auto;
-        opacity: 0;
-        transform: translateY(-8px);
-        transition: opacity 0.3s ease, transform 0.3s ease;
-        display: flex;
-        flex-direction: column;
-      `;
-    } else {
-      panel.style.cssText = `
-        position: fixed;
-        left: 0;
-        bottom: -50vh;
-        width: 100vw;
-        height: 50vh;
-        z-index: 999999;
-        background: var(--color-bg-primary, #1a1a1a);
-        border-top: 2px solid var(--color-border-dark, #444);
-        overflow: auto;
-        transition: bottom 0.4s cubic-bezier(0.4,0,0.2,1);
-        display: flex;
-        flex-direction: column;
-      `;
-    }
+    panel.style.cssText = `
+      position: fixed;
+      left: 0;
+      bottom: -50vh;
+      width: 100vw;
+      height: 50vh;
+      z-index: 999999;
+      background: var(--color-bg-primary, #1a1a1a);
+      border-top: 2px solid var(--color-border-dark, #444);
+      overflow: auto;
+      transition: bottom 0.4s cubic-bezier(0.4,0,0.2,1);
+      display: flex;
+      flex-direction: column;
+    `;
 
     // Item content
     const content = document.createElement("div");
@@ -128,37 +104,35 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
     document.body.appendChild(panel);
 
-    // Animate in
+    // Shrink the merchant sheet to top half directly on the element
+    // Do this before animating so both happen together
+    const shopEl = this.element;
+    if (shopEl) {
+      shopEl.style.setProperty("height",     "50vh", "important");
+      shopEl.style.setProperty("overflow-y", "auto", "important");
+    }
+
+    // Animate panel in
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        if (this._isGM) {
-          panel.style.opacity   = "1";
-          panel.style.transform = "translateY(0)";
-        } else {
-          panel.style.bottom = "0";
-        }
+        panel.style.bottom = "0";
       });
     });
 
-    // Re-render shop footer to show close item button
+    // Re-render footer to show Close Item button
     this.render();
   }
 
   closeItemPanel() {
     const panel = document.getElementById("ms-item-panel");
     if (panel) {
-      if (this._isGM) {
-        panel.style.opacity   = "0";
-        panel.style.transform = "translateY(-8px)";
-        setTimeout(() => panel.remove(), 300);
-      } else {
-        panel.style.bottom = "-50vh";
-        setTimeout(() => panel.remove(), 400);
-      }
+      panel.style.bottom = "-50vh";
+      setTimeout(() => panel.remove(), 400);
     }
     this._splitMode = false;
+    // Restore merchant sheet height directly on element
     const shopEl = this.element;
-    if (shopEl && !this._isGM) shopEl.style.setProperty("height", "100vh", "important");
+    if (shopEl) shopEl.style.setProperty("height", "100vh", "important");
     this.render();
     // Broadcast to players if GM is closing
     if (this._isGM) emitToAll("closeItem", { actorId: this.actor.id });
@@ -271,11 +245,8 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
       el.style.setProperty("width",         "100vw",  "important");
       el.style.setProperty("transform",     "none",   "important");
       el.style.setProperty("border-radius", "0",      "important");
-      if (this._splitMode) {
-        el.style.setProperty("height", "50vh", "important");
-      } else {
-        el.style.setProperty("height", "100vh", "important");
-      }
+      el.style.setProperty("transition",    "height 0.4s cubic-bezier(0.4,0,0.2,1)", "important");
+      el.style.setProperty("height", this._splitMode ? "50vh" : "100vh", "important");
     }
 
     // Portrait click (GM only)
