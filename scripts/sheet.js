@@ -106,10 +106,9 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
     document.body.appendChild(panel);
 
-    // Shrink the merchant sheet to top half directly on the element
-    // Do this before animating so both happen together
+    // Shrink the merchant sheet to top half — only when playerFullscreen is on
     const shopEl = this.element;
-    if (shopEl) {
+    if (shopEl && (!this._isGM) && getSetting("playerFullscreen")) {
       shopEl.style.setProperty("height",     "50vh", "important");
       shopEl.style.setProperty("overflow-y", "auto", "important");
     }
@@ -138,7 +137,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
         setTimeout(() => panel.remove(), 400);
       }
       const shopEl = this.element;
-      if (shopEl) shopEl.style.setProperty("height", "100vh", "important");
+      if (shopEl && getSetting("playerFullscreen")) shopEl.style.setProperty("height", "100vh", "important");
     }
     this._splitMode = false;
     this.render();
@@ -225,12 +224,44 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     const price    = item.price ?? 0;
     const currency = item.currency ?? "gp";
     const qty      = item.quantity === -1 ? "∞" : item.quantity ?? "∞";
+    const outOfStock = item.quantity === 0;
+
+    // Check if player can afford this item
+    let canAfford = true;
+    if (!this._isGM && getSetting("allowPurchases")) {
+      const actor = game.user.character;
+      if (actor) {
+        const currencies = actor.system?.currency ?? {};
+        const RATES = { pp: 1000, gp: 100, ep: 50, sp: 10, cp: 1 };
+        const totalCp = Object.entries(currencies).reduce((sum, [k, v]) => sum + (v || 0) * (RATES[k] || 0), 0);
+        const costCp  = price * (RATES[currency] || 100);
+        canAfford = totalCp >= costCp;
+      }
+    }
+
+    const showBuy = !this._isGM && getSetting("allowPurchases");
+    const buyDisabled = outOfStock || !canAfford;
+    const buyTitle = outOfStock ? "Out of stock" : !canAfford ? "Cannot afford" : `Buy for ${price} ${currency}`;
+
     return `
-      <div class="merchant-item" data-item-id="${item.id}">
+      <div class="merchant-item" data-item-id="${item.id}" ${outOfStock ? 'style="opacity:0.5"' : ''}>
         <img src="${item.img || "icons/svg/item-bag.svg"}" alt="${item.name}">
         <span class="item-name">${item.name}</span>
         <span class="item-qty">${qty === "∞" ? "∞" : `×${qty}`}</span>
         <span class="item-price">${price} ${currency}</span>
+        ${showBuy ? `
+          <button class="buy-item" data-item-id="${item.id}"
+            title="${buyTitle}"
+            ${buyDisabled ? "disabled" : ""}
+            style="
+              background:${buyDisabled ? "rgba(255,255,255,0.05)" : "#1a3a20"};
+              border:1px solid ${buyDisabled ? "#444" : "#2d6b35"};
+              color:${buyDisabled ? "#666" : "#ccffcc"};
+              padding:3px 10px; border-radius:3px; cursor:${buyDisabled ? "not-allowed" : "pointer"};
+              font-size:12px; white-space:nowrap;
+            ">
+            <i class="fas fa-coins"></i> Buy
+          </button>` : ""}
         ${this._isGM ? `
           <div class="item-controls">
             <button class="edit-price" data-item-id="${item.id}" title="Edit price"><i class="fas fa-tag"></i></button>
@@ -319,10 +350,22 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
         if (!item) return;
         // Open locally
         this._showItemCard(item);
-        // Broadcast to all other clients to open the same item
-        emitToAll("showItem", { actorId: this.actor.id, itemId: item.id });
+        // Broadcast to all other clients if sync is enabled
+        if (this._isGM && getSetting("syncItemView")) {
+          emitToAll("showItem", { actorId: this.actor.id, itemId: item.id });
+        }
       });
     });
+
+    // Buy button handler (players only)
+    if (!this._isGM && getSetting("allowPurchases")) {
+      el.querySelectorAll(".buy-item:not([disabled])").forEach(btn => {
+        btn.addEventListener("click", e => {
+          e.stopPropagation();
+          this._purchaseItem(btn.dataset.itemId);
+        });
+      });
+    }
 
     // GM controls
     if (this._isGM) {
@@ -406,17 +449,22 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
       this._splitMode   = true;
       this.render();
     } else {
-      // Players get split screen
-      const sheet = doc.sheet;
-      await sheet.render(true);
-      setTimeout(() => {
-        const sheetEl = sheet.element;
-        if (!sheetEl) return;
-        const clone = sheetEl.cloneNode(true);
-        clone.style.cssText = "position:relative; width:100%; height:100%; box-shadow:none; border:none;";
-        sheet.close({ force: true });
-        this.showItemSplitScreen(clone);
-      }, 100);
+      // Players get split screen only if playerFullscreen is enabled
+      // Otherwise open as a normal draggable sheet
+      if (getSetting("playerFullscreen")) {
+        const sheet = doc.sheet;
+        await sheet.render(true);
+        setTimeout(() => {
+          const sheetEl = sheet.element;
+          if (!sheetEl) return;
+          const clone = sheetEl.cloneNode(true);
+          clone.style.cssText = "position:relative; width:100%; height:100%; box-shadow:none; border:none;";
+          sheet.close({ force: true });
+          this.showItemSplitScreen(clone);
+        }, 100);
+      } else {
+        doc.sheet.render(true);
+      }
     }
   }
 
@@ -496,6 +544,94 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     const data = getMerchantData(this.actor);
     data.items  = [];
     await setMerchantData(this.actor, data);
+    this.render();
+  }
+
+  async _purchaseItem(itemId) {
+    const actor = game.user.character;
+    if (!actor) {
+      ui.notifications.warn("Merchant Sheet: No character assigned to your user.");
+      return;
+    }
+
+    const data  = getMerchantData(this.actor);
+    const item  = data.items?.find(i => i.id === itemId);
+    if (!item) return;
+
+    const price    = item.price ?? 0;
+    const currency = item.currency ?? "gp";
+
+    // Currency conversion rates in cp
+    const RATES = { pp: 1000, gp: 100, ep: 50, sp: 10, cp: 1 };
+    const costCp  = price * (RATES[currency] || 100);
+
+    // Check affordability across all denominations
+    const currencies = foundry.utils.deepClone(actor.system?.currency ?? {});
+    const totalCp = Object.entries(currencies).reduce((sum, [k, v]) => sum + (v || 0) * (RATES[k] || 0), 0);
+
+    if (totalCp < costCp) {
+      ui.notifications.warn(`Merchant Sheet: You cannot afford ${item.name}.`);
+      return;
+    }
+
+    // Deduct gold — spend from smallest denomination first then work up
+    let remaining = costCp;
+    for (const denom of ["cp", "sp", "ep", "gp", "pp"]) {
+      if (remaining <= 0) break;
+      const available = (currencies[denom] || 0) * RATES[denom];
+      const spend     = Math.min(available, remaining);
+      const spendCoins = Math.floor(spend / RATES[denom]);
+      currencies[denom] = (currencies[denom] || 0) - spendCoins;
+      remaining -= spendCoins * RATES[denom];
+    }
+
+    // If there is a remainder (e.g. buying a 1gp item with only sp)
+    // break a higher denomination to make change
+    if (remaining > 0) {
+      for (const denom of ["pp", "gp", "ep", "sp", "cp"]) {
+        if (currencies[denom] > 0 && RATES[denom] > remaining) {
+          currencies[denom] -= 1;
+          const change = RATES[denom] - remaining;
+          // Add change back in cp
+          currencies["cp"] = (currencies["cp"] || 0) + Math.floor(change);
+          remaining = 0;
+          break;
+        }
+      }
+    }
+
+    if (remaining > 0) {
+      ui.notifications.warn(`Merchant Sheet: Could not complete transaction.`);
+      return;
+    }
+
+    // Apply currency changes to actor
+    await actor.update({ "system.currency": currencies });
+
+    // Add item to actor inventory
+    let itemData = null;
+    if (item.uuid) {
+      const doc = await fromUuid(item.uuid).catch(() => null);
+      if (doc) itemData = doc.toObject();
+    }
+    if (!itemData) {
+      itemData = {
+        name:   item.name,
+        type:   item.type || "loot",
+        img:    item.img  || "icons/svg/item-bag.svg",
+        system: { quantity: 1 },
+      };
+    }
+    itemData.system = itemData.system || {};
+    itemData.system.quantity = 1;
+    await actor.createEmbeddedDocuments("Item", [itemData]);
+
+    // Reduce stock via socket so GM's shop updates too
+    emitToAll("purchaseItem", { actorId: this.actor.id, itemId, buyerName: actor.name });
+
+    ui.notifications.info(`Merchant Sheet: ${actor.name} purchased ${item.name} for ${price} ${currency}.`);
+
+    // Re-render to update buy button affordability
     this.render();
   }
 
