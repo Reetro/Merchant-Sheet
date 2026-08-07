@@ -5,9 +5,15 @@ import { emitToAll } from "./socket.js";
 import { getSetting } from "./settings.js";
 
 // ─── Helper — get the current player's assigned actor ─────────────────────────
+// game.user.character resolves only when the player has Owner permission
+// Fall back to looking up by actorId directly if character is null
 
 function _getPlayerActor() {
-  return game.user.character ?? null;
+  if (game.user.character) return game.user.character;
+  // If actorId is set but character is null the player may lack Owner permission
+  // Look up directly by id
+  if (game.user.actorId) return game.actors.get(game.user.actorId) ?? null;
+  return null;
 }
 
 export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
@@ -377,6 +383,10 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
         btn.addEventListener("click", e => {
           e.stopPropagation();
           this._purchaseItem(btn.dataset.itemId);
+        });
+        btn.addEventListener("dblclick", e => {
+          e.stopPropagation();
+          e.preventDefault();
         });
       });
     }
