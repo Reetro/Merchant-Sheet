@@ -64,6 +64,8 @@ async function _remotePurchaseItem({ actorId, itemId, buyerName }) {
   const sheet = _openSheets.get(actorId);
   if (sheet) sheet.render();
 }
+
+async function _remoteShowItem({ actorId, itemId }) {
   const { _openSheets } = globalThis.__merchantSheet;
   const sheet = _openSheets.get(actorId);
   if (!sheet) return;
