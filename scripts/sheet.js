@@ -53,22 +53,25 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
       element.style.setProperty("transition",    "height 0.4s cubic-bezier(0.4,0,0.2,1)", "important");
     }
 
-    // Force visibility in case other modules hide UI
-    const styleId = `ms-override-${element.id}`;
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement("style");
-      style.id = styleId;
-      style.textContent = `
-        #${element.id} {
-          display: flex !important;
-          visibility: visible !important;
-          opacity: 1 !important;
-          z-index: 999998 !important;
-          pointer-events: all !important;
-        }
-        #${element.id} * { visibility: visible !important; }
-      `;
-      document.head.appendChild(style);
+    // Only inject override styles when playerFullscreen is enabled
+    // When off leave Foundry's normal window management completely intact
+    if (!this._isGM && getSetting("playerFullscreen")) {
+      const styleId = `ms-override-${element.id}`;
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement("style");
+        style.id = styleId;
+        style.textContent = `
+          #${element.id} {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            z-index: 999998 !important;
+            pointer-events: all !important;
+          }
+          #${element.id} * { visibility: visible !important; }
+        `;
+        document.head.appendChild(style);
+      }
     }
   }
 
@@ -276,7 +279,8 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     const el = this.element;
 
     // Enforce fullscreen and split state for players after every render
-    if (!this._isGM) {
+    // Only when playerFullscreen setting is enabled
+    if (!this._isGM && getSetting("playerFullscreen")) {
       el.style.setProperty("position",      "fixed",  "important");
       el.style.setProperty("top",           "0",      "important");
       el.style.setProperty("left",          "0",      "important");
