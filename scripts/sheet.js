@@ -222,7 +222,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
     if (this._isGM) {
       html += `<div class="gm-controls">`;
-      if (this._itemPanelOpen) {
+      if (this._itemPanelOpen && getSetting("playerFullscreen")) {
         html += `<button id="ms-close-item" style="background:#1a2a40; border-color:#2d4480; color:#ccd9ff;"><i class="fas fa-compress-alt"></i> Close Item</button>`;
       }
       html += `
