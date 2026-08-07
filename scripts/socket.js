@@ -3,8 +3,12 @@
 import { MODULE_ID } from "./constants.js";
 import { getMerchantData } from "./data.js";
 
-// Local alias used in remote functions (globalThis not available at import time)
+// Local alias
 const getMerchantDataLocal = (actor) => actor.getFlag(MODULE_ID, "inventory") || { items: [] };
+
+function _getSetting(key) {
+  try { return game.settings.get(MODULE_ID, key); } catch { return true; }
+}
 
 let _socket;
 
@@ -27,6 +31,7 @@ function _remoteCloseShop() {
 }
 
 function _remoteScrollShop({ actorId, scrollTop }) {
+  if (!_getSetting("syncScroll")) return;
   const { _openSheets } = globalThis.__merchantSheet;
   const sheet = _openSheets.get(actorId);
   if (!sheet) return;

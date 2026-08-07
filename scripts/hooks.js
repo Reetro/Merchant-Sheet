@@ -4,12 +4,14 @@ import { getMerchantData } from "./data.js";
 import { openMerchantSheet, _openSheets } from "./store.js";
 import { registerSocketlib } from "./socket.js";
 import { MerchantSheetAdapter } from "./adapter.js";
+import { registerSettings } from "./settings.js";
 import { MODULE_ID } from "./constants.js";
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 Hooks.once("init", () => {
   console.log("Merchant Sheet | Initialising");
+  registerSettings();
   foundry.documents.collections.Actors.registerSheet("merchant-sheet", MerchantSheetAdapter, {
     types:       ["npc"],
     makeDefault: false,

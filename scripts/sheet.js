@@ -2,6 +2,7 @@
 
 import { getMerchantData, setMerchantData, getCategory, groupByCategory } from "./data.js";
 import { emitToAll } from "./socket.js";
+import { getSetting } from "./settings.js";
 
 export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   static DEFAULT_OPTIONS = {
@@ -32,7 +33,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
   // Prevent Foundry's position system from overriding our fullscreen CSS for players
   setPosition(position = {}) {
-    if (!this._isGM) return this.position;
+    if (!this._isGM && getSetting("playerFullscreen")) return this.position;
     return super.setPosition(position);
   }
 
@@ -40,7 +41,8 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     document.body.appendChild(element);
 
     // Only players get fullscreen — GM keeps normal windowed view
-    if (!this._isGM) {
+    // Respects the playerFullscreen setting
+    if (!this._isGM && getSetting("playerFullscreen")) {
       element.style.setProperty("position",      "fixed",    "important");
       element.style.setProperty("top",           "0",        "important");
       element.style.setProperty("left",          "0",        "important");
@@ -276,7 +278,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     const body = el.querySelector("#merchant-body");
     if (body) {
       // Scroll sync — GM scrolling broadcasts to all players
-      if (this._isGM) {
+      if (this._isGM && getSetting("syncScroll")) {
         let _scrollTimeout;
         body.addEventListener("scroll", () => {
           clearTimeout(_scrollTimeout);
