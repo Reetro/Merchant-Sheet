@@ -21,12 +21,6 @@ Right-click any token on the canvas and select **Open Shop** to open the merchan
 **Broadcast to All Players**
 Click **Show to All** in the shop footer to open the shop window simultaneously on every connected player's screen.
 
-```
-<User Data Path>/Data/modules/merchant-sheet/
-```
-
-Then enable the module in **Settings > Manage Modules**.
-
 ---
 
 ## How to Use
