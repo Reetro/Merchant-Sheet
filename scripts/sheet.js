@@ -239,7 +239,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     const price    = item.price ?? 0;
     const currency = item.currency ?? "gp";
     const qty      = item.quantity === -1 ? "∞" : item.quantity ?? "∞";
-    const outOfStock = item.quantity === 0;
+    const outOfStock = item.quantity === 0 && !this._isGM && getSetting("allowPurchases");
 
     // Check if player can afford this item
     let canAfford = true;
