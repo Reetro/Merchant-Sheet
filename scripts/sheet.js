@@ -4,6 +4,12 @@ import { getMerchantData, setMerchantData, getCategory, groupByCategory } from "
 import { emitToAll } from "./socket.js";
 import { getSetting } from "./settings.js";
 
+// ─── Helper — get the current player's assigned actor ─────────────────────────
+
+function _getPlayerActor() {
+  return game.user.character ?? null;
+}
+
 export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   static DEFAULT_OPTIONS = {
     window: {
@@ -231,9 +237,13 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
     // Check if player can afford this item
     let canAfford = true;
+    let hasCharacter = true;
     if (!this._isGM && getSetting("allowPurchases")) {
-      const actor = game.user.character;
-      if (actor) {
+      const actor = _getPlayerActor();
+      if (!actor) {
+        hasCharacter = false;
+        canAfford    = false;
+      } else {
         const currencies = actor.system?.currency ?? {};
         const RATES = { pp: 1000, gp: 100, ep: 50, sp: 10, cp: 1 };
         const totalCp = Object.entries(currencies).reduce((sum, [k, v]) => sum + (v || 0) * (RATES[k] || 0), 0);
@@ -244,7 +254,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
     const showBuy = !this._isGM && getSetting("allowPurchases");
     const buyDisabled = outOfStock || !canAfford;
-    const buyTitle = outOfStock ? "Out of stock" : !canAfford ? "Cannot afford" : `Buy for ${price} ${currency}`;
+    const buyTitle = !hasCharacter ? "No character assigned" : outOfStock ? "Out of stock" : !canAfford ? "Cannot afford" : `Buy for ${price} ${currency}`;
 
     return `
       <div class="merchant-item" data-item-id="${item.id}" ${outOfStock ? 'style="opacity:0.5"' : ''}>
@@ -552,9 +562,9 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   }
 
   async _purchaseItem(itemId) {
-    const actor = game.user.character;
+    const actor = _getPlayerActor();
     if (!actor) {
-      ui.notifications.warn("Merchant Sheet: No character assigned to your user.");
+      ui.notifications.warn("Merchant Sheet: No character assigned. Go to the player list, right-click your name, and assign a character.");
       return;
     }
 
