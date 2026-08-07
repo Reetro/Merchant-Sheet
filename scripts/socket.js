@@ -64,11 +64,13 @@ async function _remotePurchaseItem({ actorId, itemId, buyerName }) {
     }
 
     ui.notifications.info(`Merchant Sheet: ${buyerName} purchased ${item.name}.`);
+
+    // Broadcast sync so all clients including the buying player see the updated stock
+    emitToAll("syncShop", { actorId });
   }
 
-  // Re-render any open sheets on this client
-  const sheet = _openSheets.get(actorId);
-  if (sheet) sheet.render();
+  // Non-GM clients wait for syncShop from GM before re-rendering
+  // This ensures they read the authoritative updated stock value
 }
 
 async function _remoteShowItem({ actorId, itemId }) {
