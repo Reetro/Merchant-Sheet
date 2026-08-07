@@ -58,7 +58,7 @@ async function _remotePurchaseItem({ actorId, itemId, buyerName }) {
     const item = data.items?.find(i => i.id === itemId);
     if (!item) return;
 
-    if (item.quantity !== -1) {
+    if (item.quantity !== -1 && _getSetting("enableQuantity")) {
       item.quantity = Math.max(0, item.quantity - 1);
       await actor.setFlag("merchant-sheet", "inventory", data);
     }

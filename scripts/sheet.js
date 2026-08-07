@@ -188,7 +188,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
             title="${this._isGM ? "Click to change portrait" : ""}">
           ${this._isGM ? `<div style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,0.6);border-radius:3px;padding:1px 3px;font-size:9px;pointer-events:none;"><i class="fas fa-camera"></i></div>` : ""}
         </div>
-        <span class="merchant-name">${data.name}</span>
+        <span class="merchant-name" id="ms-shop-name" title="${this._isGM ? "Double-click to rename" : ""}" style="cursor:${this._isGM ? "pointer" : "default"}">${data.name}</span>
       </div>
       <div class="merchant-body" id="merchant-body">
     `;
@@ -238,8 +238,9 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
   _buildItemRow(item) {
     const price    = item.price ?? 0;
     const currency = item.currency ?? "gp";
-    const qty      = item.quantity === -1 ? "∞" : item.quantity ?? "∞";
-    const outOfStock = item.quantity === 0 && !this._isGM && getSetting("allowPurchases");
+    const enableQty  = getSetting("enableQuantity");
+    const qty        = !enableQty && !this._isGM ? "" : item.quantity === -1 ? "∞" : item.quantity ?? "∞";
+    const outOfStock = enableQty && item.quantity === 0 && !this._isGM && getSetting("allowPurchases");
 
     // Check if player can afford this item
     let canAfford = true;
@@ -266,7 +267,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
       <div class="merchant-item" data-item-id="${item.id}" ${outOfStock ? 'style="opacity:0.5"' : ''}>
         <img src="${item.img || "icons/svg/item-bag.svg"}" alt="${item.name}">
         <span class="item-name">${item.name}</span>
-        <span class="item-qty">${qty === "∞" ? "∞" : `×${qty}`}</span>
+        ${(getSetting("enableQuantity") || this._isGM) ? `<span class="item-qty">${qty === "∞" ? "∞" : `×${qty}`}</span>` : ""}
         <span class="item-price">${price} ${currency}</span>
         ${showBuy ? `
           <button class="buy-item" data-item-id="${item.id}"
@@ -284,7 +285,8 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
         ${this._isGM ? `
           <div class="item-controls">
             <button class="edit-price" data-item-id="${item.id}" title="Edit price"><i class="fas fa-tag"></i></button>
-            <button class="edit-qty"   data-item-id="${item.id}" title="Edit quantity"><i class="fas fa-hashtag"></i></button>
+            ${getSetting("enableQuantity") ? `<button class="edit-qty" data-item-id="${item.id}" title="Edit quantity"><i class="fas fa-hashtag"></i></button>` : ""}
+            <button class="refresh-icon" data-item-id="${item.id}" title="Refresh icon from compendium"><i class="fas fa-sync"></i></button>
             <button class="delete"     data-item-id="${item.id}" title="Remove"><i class="fas fa-times"></i></button>
           </div>` : ""}
       </div>
@@ -309,6 +311,24 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
     // Portrait click (GM only)
     if (this._isGM) {
+      // Shop name rename on double-click
+      el.querySelector("#ms-shop-name")?.addEventListener("dblclick", async () => {
+        const data = getMerchantData(this.actor);
+        const result = await foundry.applications.api.DialogV2.prompt({
+          window: { title: "Rename Shop" },
+          content: `
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+              <label style="min-width:60px">Name</label>
+              <input type="text" id="shop-name" value="${data.name}" style="flex:1" autofocus>
+            </div>`,
+          ok: { label: "Save", callback: (e, b, d) => d.element.querySelector("#shop-name").value.trim() },
+        });
+        if (!result) return;
+        data.name = result;
+        await setMerchantData(this.actor, data);
+        await this.actor.update({ name: result });
+        this._syncAndRender();
+      });
       el.querySelector("#ms-portrait")?.addEventListener("click", async () => {
         const picker = new FilePicker({
           type:     "image",
@@ -397,6 +417,8 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
         btn.addEventListener("click", e => { e.stopPropagation(); this._editPrice(btn.dataset.itemId); }));
       el.querySelectorAll(".edit-qty").forEach(btn =>
         btn.addEventListener("click", e => { e.stopPropagation(); this._editQty(btn.dataset.itemId); }));
+      el.querySelectorAll(".refresh-icon").forEach(btn =>
+        btn.addEventListener("click", e => { e.stopPropagation(); this._refreshItemIcon(btn.dataset.itemId); }));
       el.querySelectorAll(".delete").forEach(btn =>
         btn.addEventListener("click", e => { e.stopPropagation(); this._removeItem(btn.dataset.itemId); }));
       el.querySelector("#ms-close-item")?.addEventListener("click", () => this.closeItemPanel());
@@ -550,6 +572,41 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     item.quantity = result;
     await setMerchantData(this.actor, data);
     this._syncAndRender();
+  }
+
+  async _refreshItemIcon(itemId) {
+    const data = getMerchantData(this.actor);
+    const item = data.items.find(i => i.id === itemId);
+    if (!item) return;
+
+    let newImg = null;
+
+    // Try UUID first
+    if (item.uuid) {
+      const doc = await fromUuid(item.uuid).catch(() => null);
+      if (doc) newImg = doc.img;
+    }
+
+    // Fall back to compendium name search
+    if (!newImg) {
+      for (const pack of game.packs.filter(p => p.metadata.type === "Item")) {
+        try {
+          const index = await pack.getIndex({ fields: ["name", "img"] });
+          const entry = index.find(e => e.name.toLowerCase() === item.name.toLowerCase());
+          if (entry?.img) { newImg = entry.img; break; }
+        } catch { continue; }
+      }
+    }
+
+    if (!newImg) {
+      ui.notifications.warn(`Merchant Sheet: Could not find updated icon for "${item.name}".`);
+      return;
+    }
+
+    item.img = newImg;
+    await setMerchantData(this.actor, data);
+    this._syncAndRender();
+    ui.notifications.info(`Merchant Sheet: Icon updated for "${item.name}".`);
   }
 
   async _removeItem(itemId) {

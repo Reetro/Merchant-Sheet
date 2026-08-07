@@ -3,6 +3,15 @@
 const MODULE_ID = "merchant-sheet";
 
 export function registerSettings() {
+  game.settings.register(MODULE_ID, "enableQuantity", {
+    name:    "Enable Quantity",
+    hint:    "When enabled items display their stock quantity, can run out of stock, and the GM can edit quantities. When disabled all items have unlimited stock, quantities are hidden from players, and the edit quantity button is hidden.",
+    scope:   "world",
+    config:  true,
+    type:    Boolean,
+    default: true,
+  });
+
   game.settings.register(MODULE_ID, "syncItemView", {
     name:    "Sync Item View",
     hint:    "When enabled double-clicking an item on the GM screen opens that item on all connected player screens simultaneously. When disabled item viewing is local only.",
