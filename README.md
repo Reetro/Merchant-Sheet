@@ -19,16 +19,7 @@ Set a custom price and currency (cp, sp, ep, gp, pp) per item. Set quantities to
 Right-click any token on the canvas and select **Open Shop** to open the merchant window for that actor. Works on any actor — no special setup required.
 
 **Broadcast to All Players**
-Click **Show to All** in the shop footer to open the shop window simultaneously on every connected player's screen, including observer accounts like a TV table display.
-
-**Data Persistence**
-Shop inventories are saved on the actor using Foundry flags, so they persist across sessions.
-
----
-
-## Installation
-
-Drop the `merchant-sheet` folder into your Foundry user data modules directory:
+Click **Show to All** in the shop footer to open the shop window simultaneously on every connected player's screen.
 
 ```
 <User Data Path>/Data/modules/merchant-sheet/
