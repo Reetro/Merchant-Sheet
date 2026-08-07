@@ -518,8 +518,8 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
           </div>
         </div>`,
       ok: { label: "Save", callback: (e, b, d) => ({
-        price:    +d.querySelector("#item-price").value,
-        currency: d.querySelector("#item-currency").value,
+        price:    +d.element.querySelector("#item-price").value,
+        currency: d.element.querySelector("#item-currency").value,
       })},
     });
     if (!result) return;
@@ -542,7 +542,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
             placeholder="Leave empty for unlimited" min="0" style="flex:1">
         </div>`,
       ok: { label: "Save", callback: (e, b, d) => {
-        const val = d.querySelector("#item-qty").value;
+        const val = d.element.querySelector("#item-qty").value;
         return val === "" ? -1 : +val;
       }},
     });
