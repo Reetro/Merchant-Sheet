@@ -44,6 +44,8 @@ function _remoteSyncShop({ actorId }) {
   const sheet = _openSheets.get(actorId);
   if (sheet) sheet.render();
 }
+
+async function _remotePurchaseItem({ actorId, itemId, buyerName }) {
   // Only GM reduces stock — players just re-render their own sheet
   const { _openSheets } = globalThis.__merchantSheet;
   const actor = game.actors.get(actorId);
