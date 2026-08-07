@@ -318,7 +318,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
             data.img   = path;
             await setMerchantData(this.actor, data);
             await this.actor.update({ img: path, "prototypeToken.texture.src": path });
-            this.render();
+            this._syncAndRender();
           },
         });
         picker.render(true);
@@ -437,7 +437,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     });
 
     await setMerchantData(this.actor, { ...data, items });
-    this.render();
+    this._syncAndRender();
     ui.notifications.info(`Merchant Sheet: Added ${item.name} to shop.`);
   }
 
@@ -526,7 +526,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     item.price    = result.price;
     item.currency = result.currency;
     await setMerchantData(this.actor, data);
-    this.render();
+    this._syncAndRender();
   }
 
   async _editQty(itemId) {
@@ -549,14 +549,14 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     if (result === null || result === undefined) return;
     item.quantity = result;
     await setMerchantData(this.actor, data);
-    this.render();
+    this._syncAndRender();
   }
 
   async _removeItem(itemId) {
     const data = getMerchantData(this.actor);
     data.items  = (data.items || []).filter(i => i.id !== itemId);
     await setMerchantData(this.actor, data);
-    this.render();
+    this._syncAndRender();
   }
 
   async _clearShop() {
@@ -568,7 +568,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     const data = getMerchantData(this.actor);
     data.items  = [];
     await setMerchantData(this.actor, data);
-    this.render();
+    this._syncAndRender();
   }
 
   async _purchaseItem(itemId) {
@@ -680,8 +680,20 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
 
     ui.notifications.info(`Merchant Sheet: ${actor.name} purchased ${item.name} for ${price} ${currency}.`);
 
-    // Re-render to update buy button affordability
+    // Re-render to update buy button affordability — preserve scroll position
+    const body = this.element?.querySelector("#merchant-body");
+    const scrollTop = body?.scrollTop ?? 0;
+    await this.render();
+    requestAnimationFrame(() => {
+      const newBody = this.element?.querySelector("#merchant-body");
+      if (newBody) newBody.scrollTop = scrollTop;
+    });
+  }
+
+  // Re-render locally and broadcast sync to all connected clients
+  _syncAndRender() {
     this.render();
+    emitToAll("syncShop", { actorId: this.actor.id });
   }
 
   _broadcastToAll() {

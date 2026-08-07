@@ -39,7 +39,11 @@ function _remoteScrollShop({ actorId, scrollTop }) {
   if (body) body.scrollTop = scrollTop;
 }
 
-async function _remotePurchaseItem({ actorId, itemId, buyerName }) {
+function _remoteSyncShop({ actorId }) {
+  const { _openSheets } = globalThis.__merchantSheet;
+  const sheet = _openSheets.get(actorId);
+  if (sheet) sheet.render();
+}
   // Only GM reduces stock — players just re-render their own sheet
   const { _openSheets } = globalThis.__merchantSheet;
   const actor = game.actors.get(actorId);
@@ -96,12 +100,13 @@ function _remoteCloseItem({ actorId }) {
 export function registerSocketlib() {
   if (_socket) return;
   _socket = socketlib.registerModule(MODULE_ID);
-  _socket.register("remoteOpenMerchant", _remoteOpenMerchant);
-  _socket.register("remoteCloseShop",    _remoteCloseShop);
-  _socket.register("remoteScrollShop",   _remoteScrollShop);
-  _socket.register("remoteShowItem",     _remoteShowItem);
-  _socket.register("remoteCloseItem",    _remoteCloseItem);
-  _socket.register("remotePurchaseItem", _remotePurchaseItem);
+  _socket.register("remoteOpenMerchant",  _remoteOpenMerchant);
+  _socket.register("remoteCloseShop",     _remoteCloseShop);
+  _socket.register("remoteScrollShop",    _remoteScrollShop);
+  _socket.register("remoteShowItem",      _remoteShowItem);
+  _socket.register("remoteCloseItem",     _remoteCloseItem);
+  _socket.register("remotePurchaseItem",  _remotePurchaseItem);
+  _socket.register("remoteSyncShop",      _remoteSyncShop);
   console.log("Merchant Sheet | Socketlib registered");
 }
 
@@ -119,5 +124,7 @@ export function emitToAll(type, payload = {}) {
     _socket.executeForOthers("remoteCloseItem", payload);
   } else if (type === "purchaseItem") {
     _socket.executeForEveryone("remotePurchaseItem", payload);
+  } else if (type === "syncShop") {
+    _socket.executeForOthers("remoteSyncShop", payload);
   }
 }
