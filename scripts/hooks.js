@@ -150,7 +150,13 @@ function _injectMerchantIntoDialog(dialog) {
     e.preventDefault();
     e.stopImmediatePropagation();
     const folder = dialog.querySelector("select[name='folder']")?.value || null;
-    dialog.close?.();
+
+    // Close the native dialog element
+    if (typeof dialog.close === "function") dialog.close();
+    // Also dispatch cancel event and remove from DOM in case Foundry needs it
+    dialog.dispatchEvent(new Event("cancel", { bubbles: true }));
+    dialog.remove();
+
     await createMerchantActor(folder);
   }, true);
 }

@@ -632,7 +632,7 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
     // Apply currency changes to actor
     await actor.update({ "system.currency": currencies });
 
-    // Add item to actor inventory
+    // Add item to actor inventory — stack if a matching item already exists
     let itemData = null;
     if (item.uuid) {
       const doc = await fromUuid(item.uuid).catch(() => null);
@@ -646,9 +646,34 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
         system: { quantity: 1 },
       };
     }
-    itemData.system = itemData.system || {};
-    itemData.system.quantity = 1;
-    await actor.createEmbeddedDocuments("Item", [itemData]);
+
+    // Look for an existing matching item in the actor's inventory
+    // Match by UUID source first, then fall back to name + type
+    const MAX_STACK = 9999;
+    const existing = actor.items.find(i => {
+      if (item.uuid) {
+        const sourceId = i.flags?.core?.sourceId ?? i._stats?.compendiumSource;
+        if (sourceId === item.uuid) return true;
+      }
+      return i.name === item.name && i.type === (itemData.type || "loot");
+    });
+
+    if (existing) {
+      const currentQty = existing.system?.quantity ?? 1;
+      if (currentQty < MAX_STACK) {
+        await existing.update({ "system.quantity": currentQty + 1 });
+      } else {
+        // Stack is maxed — create a new item with quantity 1
+        itemData.system = itemData.system || {};
+        itemData.system.quantity = 1;
+        await actor.createEmbeddedDocuments("Item", [itemData]);
+      }
+    } else {
+      // No existing item — create new
+      itemData.system = itemData.system || {};
+      itemData.system.quantity = 1;
+      await actor.createEmbeddedDocuments("Item", [itemData]);
+    }
 
     // Reduce stock via socket so GM's shop updates too
     emitToAll("purchaseItem", { actorId: this.actor.id, itemId, buyerName: actor.name });
