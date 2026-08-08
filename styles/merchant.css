@@ -191,3 +191,14 @@
   outline-offset: -4px;
   background: rgba(106,153,85,0.08);
 }
+
+/* Fullscreen player mode — ensure the window-content fills available space
+   so merchant-body can flex and scroll correctly */
+.merchant-sheet-fullscreen .window-content,
+#merchant-sheet-app .window-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}

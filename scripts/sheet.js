@@ -75,10 +75,19 @@ export class MerchantSheet extends foundry.applications.api.ApplicationV2 {
         style.textContent = `
           #${element.id} {
             display: flex !important;
+            flex-direction: column !important;
             visibility: visible !important;
             opacity: 1 !important;
             z-index: 999998 !important;
             pointer-events: all !important;
+          }
+          #${element.id} .window-content {
+            display: flex !important;
+            flex-direction: column !important;
+            flex: 1 !important;
+            overflow: hidden !important;
+            padding: 0 !important;
+            height: 0 !important;
           }
           #${element.id} * { visibility: visible !important; }
         `;

@@ -36,7 +36,14 @@ function _remoteScrollShop({ actorId, scrollTop }) {
   const sheet = _openSheets.get(actorId);
   if (!sheet) return;
   const body = sheet.element?.querySelector("#merchant-body");
-  if (body) body.scrollTop = scrollTop;
+  if (body) {
+    body.scrollTop = scrollTop;
+    // In fullscreen the merchant-body may fill the whole window
+    // so also set scrollTop on the element itself as a fallback
+    if (_getSetting("playerFullscreen")) {
+      sheet.element.scrollTop = scrollTop;
+    }
+  }
 }
 
 function _remoteSyncShop({ actorId }) {
